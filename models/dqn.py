@@ -73,7 +73,8 @@ class DQNAgent:
         loss.backward()
         self.optimizer.step()
 
-    def train(self, env, n_episodes=1000, max_t=1000):
+    def train(self, env_name, n_episodes=1000, max_t=1000):
+        env = gym.make(env_name)
         scores = []  
         for i_episode in range(1, n_episodes+1):
             state, info = env.reset()  
@@ -89,15 +90,16 @@ class DQNAgent:
                     break
             scores.append(score)
             print(f"Episode {i_episode}/{n_episodes}, Score: {score}")
+        env.close()
         return scores
 
 # Initialize the Gym environment
-env = gym.make('CartPole-v1')
-state_size = env.observation_space.shape[0]
-action_size = env.action_space.n
+# env = gym.make(env_name)
+# state_size = env.observation_space.shape[0]
+# action_size = env.action_space.n
 
-# Initialize DQN Agent
-agent = DQNAgent(state_size, action_size)
-scores = agent.train(env)  # Train the agent
+# # Initialize DQN Agent
+# agent = DQNAgent(state_size, action_size)
+# scores = agent.train(env)  # Train the agent
 
-env.close()
+# env.close()
