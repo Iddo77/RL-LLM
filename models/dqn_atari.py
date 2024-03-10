@@ -33,12 +33,19 @@ class QNetwork(nn.Module):
 
 
 class ReplayBuffer:
-    def __init__(self, buffer_size, batch_size):
+    def __init__(self, buffer_size=100000, batch_size=32):
         self.memory = deque(maxlen=buffer_size)
         self.batch_size = batch_size
+        self.current_size = 0
+        self.max_size = buffer_size
 
     def add(self, state, action, reward, next_state, done):
+        if self.current_size == self.max_size:
+            # discard oldest transition
+            self.memory.popleft()
+            self.current_size -= 1
         self.memory.append((state, action, reward, next_state, done))
+        self.current_size += 1
 
     def sample(self):
         batch = random.sample(self.memory, self.batch_size)
@@ -55,11 +62,12 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, action_size, learn_freq=4, target_update_freq=1000):
+    def __init__(self, action_size, learn_freq=4, target_update_freq=10000):
         self.action_size = action_size
-        self.memory = ReplayBuffer(10000, 64)
+        self.memory = ReplayBuffer()
         self.model = QNetwork(action_size).to(device)
         self.target_model = QNetwork(action_size).to(device)
+        self.target_model.eval()
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
         self.criterion = nn.MSELoss()
         self.eps = 1.0  # epsilon is for epsilon-greedy exploration
@@ -103,7 +111,7 @@ class DQNAgent:
         loss.backward()
         self.optimizer.step()
 
-    def train(self, env, game: CropValues, n_episodes=1000, max_t=10000, save_interval=100, log_interval=10,
+    def train(self, env, game: CropValues, n_episodes=10000, max_t=1000, save_interval=100, log_interval=10,
               weights_dir='DQN/weights'):
         scores = []
         eps_history = []  # To keep track of epsilon over time
@@ -126,9 +134,9 @@ class DQNAgent:
                 action = self.act(state_tensor)
                 # execute the action and get the reward from the environment
                 next_raw_state, reward, done, truncated, info = env.step(action)
-                next_state = preprocess_frame(next_raw_state, game)
+                next_state_frame = preprocess_frame(next_raw_state, game)
                 # Update the state stack with the new frame
-                next_state = np.append(state[1:, :, :], np.expand_dims(next_state, 0), axis=0)
+                next_state = np.append(state[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
                 # save state in memory
                 self.memory.add(state, action, reward, next_state, done or truncated)
 
@@ -142,6 +150,7 @@ class DQNAgent:
                 if self.num_steps % self.target_update_freq == 0:
                     # clone self.model and set as the new target model
                     self.target_model.load_state_dict(self.model.state_dict())
+                    self.target_model.eval()
 
                 if done or truncated:
                     # decay epsilon, so that more exploitation is done and less exploration
