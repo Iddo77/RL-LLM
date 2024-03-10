@@ -43,10 +43,10 @@ class ReplayBuffer:
     def sample(self):
         batch = random.sample(self.memory, self.batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
-        states = torch.tensor(states, dtype=torch.float, device=device)
+        states = torch.tensor(np.array(states), dtype=torch.float, device=device)
         actions = torch.tensor(actions, dtype=torch.long, device=device)
         rewards = torch.tensor(rewards, dtype=torch.float, device=device)
-        next_states = torch.tensor(next_states, dtype=torch.float, device=device)
+        next_states = torch.tensor(np.array(next_states), dtype=torch.float, device=device)
         dones = torch.tensor(dones, dtype=torch.float, device=device)
         return states, actions, rewards, next_states, dones
 
@@ -55,17 +55,20 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, action_size):
+    def __init__(self, action_size, learn_freq=4, target_update_freq=1000):
         self.action_size = action_size
         self.memory = ReplayBuffer(10000, 64)
         self.model = QNetwork(action_size).to(device)
         self.target_model = QNetwork(action_size).to(device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
         self.criterion = nn.MSELoss()
         self.eps = 1.0  # epsilon is for epsilon-greedy exploration
-        self.eps_decay = 0.995  # it decays over time, so in the beginning more exploration and later more exploitation
+        self.eps_decay = 0.998  # it decays over time, so in the beginning more exploration and later more exploitation
         self.eps_min = 0.01
         self.gamma = 0.99  # the discount factor, that discounts the value of future states
+        self.learn_freq = learn_freq  # how often to call self.learn()
+        self.target_update_freq = target_update_freq  # how often to update the target model
+        self.num_steps = 0
 
     def act(self, state_tensor):
         # Assume state_tensor is already a PyTorch tensor on the correct device
@@ -100,20 +103,7 @@ class DQNAgent:
         loss.backward()
         self.optimizer.step()
 
-    def update_target_model(self, tau=0.001):
-        """
-        Gradually updates the weights of the target model by blending them with the weights from the online model.
-        This helps to keep the target model's weights stable and changing slowly over time, which is necessary for
-        stable learning.
-
-        Parameters:
-        - tau: A small coefficient (<<1) controlling the blend rate; how much of the
-          online model's weights to mix into the target model's weights.
-        """
-        for target_param, online_param in zip(self.target_model.parameters(), self.model.parameters()):
-            target_param.data.copy_(tau * online_param.data + (1.0 - tau) * target_param.data)
-
-    def train(self, env, game: CropValues, n_episodes=1000, max_t=1000, save_interval=100, log_interval=10,
+    def train(self, env, game: CropValues, n_episodes=1000, max_t=10000, save_interval=100, log_interval=10,
               weights_dir='DQN/weights'):
         scores = []
         eps_history = []  # To keep track of epsilon over time
@@ -145,8 +135,13 @@ class DQNAgent:
                 state = next_state
                 score += reward
 
-                self.learn()
-                self.update_target_model()
+                self.num_steps += 1
+                if self.num_steps % self.learn_freq == 0:
+                    self.learn()
+
+                if self.num_steps % self.target_update_freq == 0:
+                    # clone self.model and set as the new target model
+                    self.target_model.load_state_dict(self.model.state_dict())
 
                 if done or truncated:
                     # decay epsilon, so that more exploitation is done and less exploration
