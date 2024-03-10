@@ -9,6 +9,8 @@ Farama-Notifications==0.0.4
 filelock==3.13.1
 fsspec==2024.2.0
 gymnasium==0.29.1
+gymnasium[atari]
+gymnasium[accept-rom-license]
 ipykernel==6.29.2
 ipython==8.22.1
 jedi==0.19.1
