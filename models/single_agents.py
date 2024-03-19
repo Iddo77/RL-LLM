@@ -1,6 +1,6 @@
 import gymnasium as gym
 
-env = gym.make('CartPole-v1', render_mode="human")
+env = gym.make('LunarLander-v2', render_mode="human")
 observation, info = env.reset()
 
 for episode in range(20):  # Run 20 episodes
