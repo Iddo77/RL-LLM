@@ -24,7 +24,7 @@ actions = [
 
 class GameInfo(Enum):
     BOXING = {"crop_values": (13, 97), "actions": actions[:]}
-    BREAKOUT = {"crop_values": (18, 102), "actions": actions[:4]}
+    BREAKOUT = {"crop_values": (18, 102), "actions": ["NOOP", "FIRE", "RIGHT", "LEFT",]}
     RIVERRAID = {"crop_values": (2, 86), "actions": actions[:]}
 
     @property
