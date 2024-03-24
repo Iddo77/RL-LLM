@@ -184,11 +184,19 @@ class LLMAgent:
         return self.current_game_state
 
     @staticmethod
-    def describe_frames(frames) -> str:
+    def describe_frames(frames, expected_entities) -> str:
         image_stack = np.stack(frames, axis=0)
         image = merge_images_with_bars(image_stack)
-        text = """Describe these four consecutive game frames individually, then summarize the overall action or motion.
-         Do not write anything else."""
+        if len(expected_entities):
+            extra_text = (f"Previously these entities were encountered: {', '.join(expected_entities)}."
+                          f" Try to describe the frames using these terms.")
+        else:
+            extra_text = ""
+
+        text = '\n'.join(["Describe these four consecutive game frames individually, "
+                          "then summarize the overall action or motion.",
+                          extra_text, "Do not write anything else."])
+
         response = query_image_with_text(image, text)
         return response.content
 
@@ -221,7 +229,8 @@ class LLMAgent:
             score = 0
             for t in range(max_t):
 
-                self.current_game_state.game_state_description = self.describe_frames(frames)
+                self.current_game_state.game_state_description = (
+                    self.describe_frames(frames, self.current_game_state.entities_encountered))
 
                 llm_messages = get_llm_messages_to_update_game_state()
                 llm_result = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
