@@ -67,6 +67,6 @@ def save_image_to_file(image_array, file_path):
 def convert_image_to_base64(image_array):
     image = Image.fromarray(image_array)
     buffer = io.BytesIO()
-    image.save(buffer, format="PNG")  # You can change the format if needed
+    image.save(buffer, format="PNG")
     buffer.seek(0)
     return base64.b64encode(buffer.read()).decode()
