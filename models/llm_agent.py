@@ -125,14 +125,17 @@ def invoke_llm_and_parse_result(llm: ChatOpenAI,
 def update_game_state_and_act(llm_result: dict, game_state: GameState, game_info: GameInfo):
 
     if "entities_in_game_state" in llm_result:
-        valid_ents = []
-        for ent in llm_result["entities_in_game_state"]:
-            name = ent.get("name")
-            position = ent.get("position")
-            if name is not None and position is not None:
-                valid_ents.append(ent)
-                if name not in game_state.entities_encountered:
-                    game_state.entities_encountered.append(name)
+        valid_entities = []
+        entities = llm_result["entities_in_game_state"]
+        if isinstance(entities, list):
+            for ent in entities:
+                if isinstance(ent, dict):
+                    name = ent.get("name")
+                    position = ent.get("position")
+                    if name is not None and position is not None:
+                        valid_entities.append(ent)
+                        if name not in game_state.entities_encountered:
+                            game_state.entities_encountered.append(name)
 
     if "world_model" in llm_result:
         game_state.world_model = llm_result["world_model"]
@@ -189,6 +192,16 @@ class LLMAgent:
         response = query_image_with_text(image, text)
         return response.content
 
+    def update_best_game(self):
+        if self.current_game_state is None:
+            return
+        if self.best_game_state is None and self.current_game_state.total_reward > 0:
+            # no need to keep game states with no rewards
+            self.best_game_state = self.current_game_state
+        elif (self.best_game_state is not None and
+              self.current_game_state.total_reward > self.best_game_state.total_reward):
+            self.best_game_state = self.current_game_state
+
     def train(self, env, n_episodes=100, max_t=1000, save_interval=100, log_interval=10, state_dir='LLM/state'):
         scores = []
         if not os.path.exists(state_dir):
@@ -202,11 +215,7 @@ class LLMAgent:
             first_frame = preprocess_frame(raw_state, self.game_info.crop_values)
             frames = np.stack([first_frame] * 4, axis=0)  # Stack the initial state 4 times
 
-            if self.current_game_state is not None \
-                    and self.best_game_state is not None \
-                    and self.current_game_state.total_reward > self.best_game_state.total_reward > 0:
-                self.best_game_state = self.current_game_state
-
+            self.update_best_game()
             self.init_game()
 
             score = 0
