@@ -233,7 +233,8 @@ class LLMAgent:
                 # Update the state stack with the new frame
                 next_frames = np.append(frames[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
 
-                self.current_game_state.recent_actions = self.current_game_state.recent_actions[1:] + [reward]
+                action_text = self.game_info.actions[action]
+                self.current_game_state.recent_actions = self.current_game_state.recent_actions[1:] + [action_text]
                 self.current_game_state.recent_rewards = self.current_game_state.recent_rewards[1:] + [reward]
                 self.current_game_state.total_reward += reward
 
