@@ -22,6 +22,22 @@ class TestLLMAgent(unittest.TestCase):
         print(response.content)
         self.assertTrue(True)
 
+    def test_breakout_1(self):
+        image_array = np.array(Image.open('4-breakout.png'))
+        text = """Describe these four consecutive game frames individually, then summarize the overall action or motion.
+         Do not write anything else."""
+        response = query_image_with_text(image_array, text)
+        print(response.content)
+        self.assertTrue(True)
+
+    def test_breakout_2(self):
+        image_array = np.array(Image.open('4-breakout.png'))
+        text = """Describe these four consecutive frames of the Atari game Breakout individually, then summarize the overall action or motion.
+         Do not write anything else."""
+        response = query_image_with_text(image_array, text)
+        print(response.content)
+        self.assertTrue(True)
+
 
 if __name__ == '__main__':
     unittest.main()

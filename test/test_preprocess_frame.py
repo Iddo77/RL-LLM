@@ -175,6 +175,32 @@ class TestPreprocessFrame(unittest.TestCase):
 
         self.assertTrue(True)
 
+    def test_merge_images_with_bars_breakout(self):
+        env = gym.make('BreakoutDeterministic-v4')
+        env.reset()
+
+        frames = []
+
+        for i in range(4):
+            if i == 0:
+                action = 1  # FIRE
+            else:
+                action = 2  # RIGHT
+
+            next_state, reward, terminated, truncated, info = env.step(action)
+            next_state = preprocess_frame(next_state, CropValues.BREAKOUT)
+            frames.append(next_state)
+            if terminated or truncated:
+                break
+
+        env.close()
+
+        image_array = np.stack(frames, axis=0)
+        image = merge_images_with_bars(image_array)
+        save_image_to_file(image, '4-breakout.png')
+
+        self.assertTrue(True)
+
 
 if __name__ == '__main__':
     unittest.main()
