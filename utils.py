@@ -22,8 +22,8 @@ def preprocess_frame(frame, game: CropValues):
 
 
 def convert_to_grayscale(frame):
-    # simply take the mean of the channels
-    return np.mean(frame, axis=2).astype(np.uint8)
+    grayscale = 0.2989 * frame[:, :, 0] + 0.5870 * frame[:, :, 1] + 0.1140 * frame[:, :, 2]
+    return grayscale.astype(np.uint8)
 
 
 def resize_frame(frame, x, y):
