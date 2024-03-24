@@ -1,8 +1,9 @@
 import unittest
 import gymnasium as gym
-import matplotlib.pyplot as plt
+import numpy as np
 
-from utils import preprocess_frame, convert_to_grayscale, resize_frame, CropValues
+from utils import preprocess_frame, convert_to_grayscale, resize_frame, CropValues, merge_images_with_bars, \
+    save_image_to_file
 
 
 class TestPreprocessFrame(unittest.TestCase):
@@ -15,7 +16,7 @@ class TestPreprocessFrame(unittest.TestCase):
         for i in range(8):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
-            create_and_save_image(next_state, i + 1, "BoxingNoPreprocess")
+            save_image_to_file(next_state, f'BoxingNoPreprocess{i + 1}.png')
             if terminated or truncated:
                 break
 
@@ -32,7 +33,7 @@ class TestPreprocessFrame(unittest.TestCase):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
             next_state = convert_to_grayscale(next_state)
-            create_and_save_image(next_state, i + 1, "BoxingGray")
+            save_image_to_file(next_state, f'BoxingGray{i + 1}.png')
 
             if terminated or truncated:
                 break
@@ -49,7 +50,7 @@ class TestPreprocessFrame(unittest.TestCase):
         for i in range(4):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
-            create_and_save_image(next_state, i + 1, "BoxingFrameSkip")
+            save_image_to_file(next_state, f'BoxingFrameSkip{i + 1}.png')
 
             if terminated or truncated:
                 break
@@ -67,7 +68,7 @@ class TestPreprocessFrame(unittest.TestCase):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
             next_state = resize_frame(next_state, 84, 110)
-            create_and_save_image(next_state, i + 1, "BoxingResize")
+            save_image_to_file(next_state, f'BoxingResize{i + 1}.png')
 
             if terminated or truncated:
                 break
@@ -86,7 +87,7 @@ class TestPreprocessFrame(unittest.TestCase):
             next_state, reward, terminated, truncated, info = env.step(action)
             next_state = resize_frame(next_state, 84, 110)
             next_state = next_state[18:102, :]
-            create_and_save_image(next_state, i + 1, "BoxingResizeAndCrop")
+            save_image_to_file(next_state, f'BoxingResizeAndCrop{i + 1}.png')
 
             if terminated or truncated:
                 break
@@ -103,7 +104,7 @@ class TestPreprocessFrame(unittest.TestCase):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
             next_state = preprocess_frame(next_state, CropValues.BOXING)
-            create_and_save_image(next_state, i + 1, "Boxing")
+            save_image_to_file(next_state, f'Boxing{i + 1}.png')
 
             if terminated or truncated:
                 break
@@ -120,7 +121,7 @@ class TestPreprocessFrame(unittest.TestCase):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
             next_state = preprocess_frame(next_state, CropValues.BREAKOUT)
-            create_and_save_image(next_state, i + 1, "Breakout")
+            save_image_to_file(next_state, f'Breakout{i + 1}.png')
 
             if terminated or truncated:
                 break
@@ -139,7 +140,7 @@ class TestPreprocessFrame(unittest.TestCase):
             if i < 20:
                 continue
             next_state = preprocess_frame(next_state, CropValues.RIVERRAID)
-            create_and_save_image(next_state, i + 1, "Riverraid")
+            save_image_to_file(next_state, f'Riverraid{i + 1}.png')
 
             if terminated or truncated:
                 break
@@ -147,13 +148,32 @@ class TestPreprocessFrame(unittest.TestCase):
         env.close()
         self.assertTrue(True)
 
+    def test_merge_images_with_bars(self):
+        env = gym.make('RiverraidDeterministic-v4')
+        env.reset()
 
-def create_and_save_image(state, frame_number, name):
-    plt.imshow(state, cmap='gray')
-    plt.title(f'Frame {frame_number}')
-    plt.axis('off')
-    plt.savefig(f'{name}{frame_number}.png')
-    plt.close()
+        frames = []
+
+        # Process and save the first 8 frames
+        for i in range(28):
+            action = env.action_space.sample()  # Taking a random action
+            next_state, reward, terminated, truncated, info = env.step(action)
+            if i < 20:
+                continue
+            next_state = preprocess_frame(next_state, CropValues.RIVERRAID)
+            frames.append(next_state)
+            if len(frames) == 4:
+                break
+            if terminated or truncated:
+                break
+
+        env.close()
+
+        image_array = np.stack(frames, axis=0)
+        image = merge_images_with_bars(image_array)
+        save_image_to_file(image, '4-images.png')
+
+        self.assertTrue(True)
 
 
 if __name__ == '__main__':
