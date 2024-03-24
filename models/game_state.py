@@ -3,18 +3,18 @@ import json
 
 class GameState:
     def __init__(self):
+        self.world_model = "Unknown. The game has just started."
         self.game_state_description = ""
         self.entities_encountered = []
         self.entities_in_game_state = []
         self.available_actions = []
         self.recent_actions = ['NOOP'] * 4
-        self.recent_rewards = [0, 0, 0, 0]
+        self.recent_rewards = [0.0] * 4
         self.guidelines = {
             "recommended_actions": [],
             "actions_to_avoid": []
         }
-        self.total_reward = 0
-        self.next_action = ""
+        self.total_reward = 0.0
 
     def to_json(self):
         return json.dumps(self.__dict__, indent=2)

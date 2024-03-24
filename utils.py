@@ -1,4 +1,5 @@
 import io
+import json
 from enum import Enum
 
 import numpy as np
@@ -64,3 +65,22 @@ def convert_image_to_base64(image_array):
     image.save(buffer, format="PNG")
     buffer.seek(0)
     return base64.b64encode(buffer.read()).decode()
+
+
+def parse_json_from_substring(input_string: str):
+
+    start_index = input_string.find('{')
+    end_index = input_string.rfind('}')
+
+    if start_index == -1 or end_index == -1 or start_index >= end_index:
+        print("Valid JSON structure not found in the input string. Returning empty JSON.")
+        return {}
+
+    try:
+        json_str = input_string[start_index:end_index + 1]
+        json_obj = json.loads(json_str)
+        return json_obj
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse extracted substring as JSON: {e}. Returning empty JSON.")
+        return {}
+
