@@ -2,8 +2,8 @@ import unittest
 import gymnasium as gym
 import numpy as np
 
-from utils import preprocess_frame, convert_to_grayscale, resize_frame, CropValues, merge_images_with_bars, \
-    save_image_to_file
+from models.game_info import GameInfo
+from utils import preprocess_frame, convert_to_grayscale, resize_frame, merge_images_with_bars, save_image_to_file
 
 
 class TestPreprocessFrame(unittest.TestCase):
@@ -103,7 +103,7 @@ class TestPreprocessFrame(unittest.TestCase):
         for i in range(4):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
-            next_state = preprocess_frame(next_state, CropValues.BOXING)
+            next_state = preprocess_frame(next_state, GameInfo.BOXING.crop_values)
             save_image_to_file(next_state, f'Boxing{i + 1}.png')
 
             if terminated or truncated:
@@ -120,7 +120,7 @@ class TestPreprocessFrame(unittest.TestCase):
         for i in range(4):
             action = env.action_space.sample()  # Taking a random action
             next_state, reward, terminated, truncated, info = env.step(action)
-            next_state = preprocess_frame(next_state, CropValues.BREAKOUT)
+            next_state = preprocess_frame(next_state, GameInfo.BREAKOUT.crop_values)
             save_image_to_file(next_state, f'Breakout{i + 1}.png')
 
             if terminated or truncated:
@@ -139,7 +139,7 @@ class TestPreprocessFrame(unittest.TestCase):
             next_state, reward, terminated, truncated, info = env.step(action)
             if i < 20:
                 continue
-            next_state = preprocess_frame(next_state, CropValues.RIVERRAID)
+            next_state = preprocess_frame(next_state, GameInfo.RIVERRAID.crop_values)
             save_image_to_file(next_state, f'Riverraid{i + 1}.png')
 
             if terminated or truncated:
@@ -160,7 +160,7 @@ class TestPreprocessFrame(unittest.TestCase):
             next_state, reward, terminated, truncated, info = env.step(action)
             if i < 20:
                 continue
-            next_state = preprocess_frame(next_state, CropValues.RIVERRAID)
+            next_state = preprocess_frame(next_state, GameInfo.RIVERRAID.crop_values)
             frames.append(next_state)
             if len(frames) == 4:
                 break
@@ -188,7 +188,7 @@ class TestPreprocessFrame(unittest.TestCase):
                 action = 2  # RIGHT
 
             next_state, reward, terminated, truncated, info = env.step(action)
-            next_state = preprocess_frame(next_state, CropValues.BREAKOUT)
+            next_state = preprocess_frame(next_state, GameInfo.BREAKOUT.crop_values)
             frames.append(next_state)
             if terminated or truncated:
                 break

@@ -6,17 +6,11 @@ from PIL import Image
 import base64
 
 
-class CropValues(Enum):
-    BOXING = (13, 97)
-    BREAKOUT = (18, 102)
-    RIVERRAID = (2, 86)
-
-
-def preprocess_frame(frame, game: CropValues):
+def preprocess_frame(frame, crop_values):
     gray_frame = convert_to_grayscale(frame)
     resized_frame = resize_frame(gray_frame, 84, 110)
     # Crop to 84x84 (roughly the playing area)
-    crop_start, crop_end = game.value
+    crop_start, crop_end = crop_values
     cropped_frame = resized_frame[crop_start:crop_end, :]
     return cropped_frame
 

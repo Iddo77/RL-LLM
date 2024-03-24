@@ -9,7 +9,8 @@ import gymnasium as gym
 import random
 from collections import deque
 
-from utils import CropValues, preprocess_frame
+from models.game_info import GameInfo
+from utils import preprocess_frame
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -111,7 +112,7 @@ class DQNAgent:
         loss.backward()
         self.optimizer.step()
 
-    def train(self, env, game: CropValues, n_episodes=10000, max_t=1000, save_interval=100, log_interval=10,
+    def train(self, env,  game_info: GameInfo, n_episodes=10000, max_t=1000, save_interval=100, log_interval=10,
               weights_dir='DQN/weights'):
         scores = []
         eps_history = []  # To keep track of epsilon over time
@@ -123,7 +124,7 @@ class DQNAgent:
             raw_state, info = env.reset()
             # The raw state is a screen-dump of the game.
             # It is resized to 84x84 and turned to grayscale during preprocessing.
-            state = preprocess_frame(raw_state, game)
+            state = preprocess_frame(raw_state, game_info.crop_values)
             state = np.stack([state] * 4, axis=0)  # Stack the initial state 4 times
 
             score = 0
@@ -134,7 +135,7 @@ class DQNAgent:
                 action = self.act(state_tensor)
                 # execute the action and get the reward from the environment
                 next_raw_state, reward, done, truncated, info = env.step(action)
-                next_state_frame = preprocess_frame(next_raw_state, game)
+                next_state_frame = preprocess_frame(next_raw_state, game_info.crop_values)
                 # Update the state stack with the new frame
                 next_state = np.append(state[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
                 # save state in memory
@@ -197,5 +198,5 @@ class DQNAgent:
 if __name__ == '__main__':
     env = gym.make('BreakoutNoFrameskip-v4')
     agent = DQNAgent(env.action_space.n)
-    scores, eps_history = agent.train(env, CropValues.BREAKOUT)
+    scores, eps_history = agent.train(env, GameInfo.BREAKOUT)
     env.close()
