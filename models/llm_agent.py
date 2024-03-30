@@ -10,7 +10,8 @@ from langchain.schema.messages import HumanMessage
 
 from models.game_info import GameInfo
 from models.game_state import GameState
-from utils import preprocess_frame, convert_image_to_base64, merge_images_with_bars, parse_json_from_substring
+from image_processing import preprocess_frame, convert_image_to_base64, merge_images_with_bars
+from utils import parse_json_from_substring
 
 
 # and environment variable OPENAI_API_KEY must be set with the OpenAI key

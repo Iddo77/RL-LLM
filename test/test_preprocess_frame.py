@@ -3,7 +3,7 @@ import gymnasium as gym
 import numpy as np
 
 from models.game_info import GameInfo
-from utils import preprocess_frame, convert_to_grayscale, resize_frame, merge_images_with_bars, save_image_to_file
+from image_processing import preprocess_frame, convert_to_grayscale, resize_frame, merge_images_with_bars, save_image_to_file
 
 
 class TestPreprocessFrame(unittest.TestCase):

@@ -10,7 +10,7 @@ import random
 from collections import deque
 
 from models.game_info import GameInfo
-from utils import preprocess_frame
+from image_processing import preprocess_frame
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
