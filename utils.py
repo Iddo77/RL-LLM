@@ -17,3 +17,12 @@ def parse_json_from_substring(input_string: str):
     except json.JSONDecodeError as e:
         print(f"Failed to parse extracted substring as JSON: {e}. Returning empty JSON.")
         return {}
+
+
+def escape_brackets(prompt_text: str, variables: list[str]) -> str:
+    # escape brackets in json, otherwise validation of langchain will fail
+    prompt_text = prompt_text.replace('{', '{{')
+    prompt_text = prompt_text.replace('}', '}}')
+    for var in variables:
+        prompt_text = prompt_text.replace('{{' + var + '}}', '{' + var + '}')
+    return prompt_text

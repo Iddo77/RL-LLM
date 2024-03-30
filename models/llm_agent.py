@@ -11,7 +11,7 @@ from langchain.schema.messages import HumanMessage
 from models.game_info import GameInfo
 from models.game_state import GameState
 from image_processing import preprocess_frame, convert_image_to_base64, merge_images_with_bars, save_image_to_file
-from utils import parse_json_from_substring
+from utils import parse_json_from_substring, escape_brackets
 
 
 # and environment variable OPENAI_API_KEY must be set with the OpenAI key
@@ -61,34 +61,41 @@ Create a json containing the world model, the entities, and the next action. Wri
 }"""
 
     # escape brackets in json, otherwise validation of langchain will fail
-    prompt_text = prompt_text.replace('{', '{{')
-    prompt_text = prompt_text.replace('}', '}}')
-    prompt_text = prompt_text.replace('{{game_state}}', '{game_state}')
+    prompt_text = escape_brackets(prompt_text, ['game_state'])
 
     system_message = SystemMessage("You are an RL agent playing an Atari game.")
     prompt_template = HumanMessagePromptTemplate.from_template(input_variables=["game_state"], template=prompt_text)
     return [system_message, prompt_template]
 
 
-def get_llm_message_game_over():
-    prompt_text = """Game over!!! 
+def get_llm_message_life_lost(is_game_over: bool):
+
+    if is_game_over:
+        prompt_start = 'Game over!!!'
+    else:
+        prompt_start = 'You lost a life!'
+
+    prompt_text = prompt_start + """
     
-    Do you want to to update the guidelines for future games?
-    
-    Respond with a json like this:
-    
-       {
-           "guidelines": {
-                "recommended_actions": [],
-                "actions_to_avoid": []
-            }
-       }
-    
-    When responding, make sure to copy all existing guidelines that you want to keep. You can expand the list if you think you can do better in the future. 
-    If you have no new ideas, then just copy the old guidelines without adding anything new. 
-    
-    Respond with the json only and write nothing else.
+Do you want to to update the guidelines for future games?
+
+Respond with a json like this:
+
+   {
+       "guidelines": {
+            "recommended_actions": [],
+            "actions_to_avoid": []
+        }
+   }
+
+When responding, make sure to copy all existing guidelines that you want to keep. You can expand the list if you think you can do better in the future. 
+If you have no new ideas, then just copy the old guidelines without adding anything new. 
+
+Respond with the json only and write nothing else.
     """
+    # escape brackets in json, otherwise validation of langchain will fail
+    prompt_text = escape_brackets(prompt_text, [])
+
     return HumanMessagePromptTemplate.from_template(template=prompt_text)
 
 
@@ -111,6 +118,10 @@ def get_llm_message_game_reward():
 
     Respond with the json only and write nothing else.
     """
+
+    # escape brackets in json, otherwise validation of langchain will fail
+    prompt_text = escape_brackets(prompt_text, [])
+
     return HumanMessagePromptTemplate.from_template(template=prompt_text)
 
 
@@ -151,9 +162,6 @@ def update_game_state_and_act(llm_result: dict, game_state: GameState, game_info
         action_text = llm_result["next_action"]
         if action_text in game_info.actions:
             action = game_info.actions.index(action_text)
-    else:
-        # hack to make sure the llm-result can be reused later with the action
-        llm_result["next_action"] = "NOOP"
 
     return action
 
@@ -220,7 +228,7 @@ class LLMAgent:
               self.current_game_state.total_reward > self.best_game_state.total_reward):
             self.best_game_state = self.current_game_state
 
-    def train(self, env, n_episodes=100, max_t=1000, save_interval=100, log_interval=10, state_dir='LLM/state'):
+    def train(self, env, n_episodes=100, max_t=1000, save_interval=20, log_interval=10, state_dir='LLM/state'):
         scores = []
         if not os.path.exists(state_dir):
             os.makedirs(state_dir)
@@ -237,12 +245,15 @@ class LLMAgent:
             self.init_game()
 
             score = 0
+            lives = info['lives']
+
             for t in range(max_t):
 
                 image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
                 if t % save_interval == 0:
-                    image_filepath = os.path.join(state_dir, f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png')
-                    save_image_to_file(image, image_filepath)
+                    filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
+                    save_image_to_file(image, os.path.join(state_dir, filename))
+
                 self.current_game_state.recent_frames_and_motion_summary = (
                     self.describe_consecutive_screenshots(image, self.current_game_state.world_model,
                                                           self.current_game_state.previously_encountered_entities))
@@ -266,19 +277,22 @@ class LLMAgent:
                     ai_message = AIMessage(json.dumps(llm_result, indent=2))
                     llm_messages.append(ai_message)
                     llm_messages.append(get_llm_message_game_reward())
-                    llm_result_reward = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
-                    update_guidelines(llm_result_reward, self.current_game_state)
+                    new_guidelines = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
+                    update_guidelines(new_guidelines, self.current_game_state)
                     pass
 
                 frames = next_frames
                 score += reward
 
-                if done or truncated:
+                if info['lives'] < lives:
+                    lives = info['lives']
                     ai_message = AIMessage(json.dumps(llm_result, indent=2))
                     llm_messages.append(ai_message)
-                    llm_messages.append(get_llm_message_game_over())
-                    llm_result_game_over = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
-                    update_guidelines(llm_result_game_over, self.current_game_state)
+                    llm_messages.append(get_llm_message_life_lost(lives == 0))
+                    new_guidelines = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
+                    update_guidelines(new_guidelines, self.current_game_state)
+
+                if done or truncated:
                     break
 
             scores.append(score)
@@ -292,7 +306,7 @@ class LLMAgent:
 
 
 if __name__ == '__main__':
-    env = gym.make('BreakoutNoFrameskip-v4')
+    env = gym.make('BreakoutDeterministic-v4')
     agent = LLMAgent(GameInfo.BREAKOUT)
     scores = agent.train(env)
     env.close()
