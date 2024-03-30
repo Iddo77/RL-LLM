@@ -10,7 +10,7 @@ from langchain.schema.messages import HumanMessage
 
 from models.game_info import GameInfo
 from models.game_state import GameState
-from image_processing import preprocess_frame, convert_image_to_base64, merge_images_with_bars
+from image_processing import preprocess_frame, convert_image_to_base64, merge_images_with_bars, save_image_to_file
 from utils import parse_json_from_substring
 
 
@@ -185,9 +185,7 @@ class LLMAgent:
         return self.current_game_state
 
     @staticmethod
-    def describe_frames(frames, expected_entities) -> str:
-        image_stack = np.stack(frames, axis=0)
-        image = merge_images_with_bars(image_stack)
+    def describe_consecutive_screenshots(image, expected_entities) -> str:
         if len(expected_entities):
             extra_text = (f"Previously these entities were encountered: {', '.join(expected_entities)}."
                           f" Try to describe the frames using these terms.")
@@ -221,7 +219,7 @@ class LLMAgent:
             raw_state, info = env.reset()
             # The raw state is a screen-dump of the game.
             # It is resized to 84x84 and turned to grayscale during preprocessing.
-            first_frame = preprocess_frame(raw_state, self.game_info.crop_values)
+            first_frame = preprocess_frame(raw_state, self.game_info.crop_values, keep_color=True)
             frames = np.stack([first_frame] * 4, axis=0)  # Stack the initial state 4 times
 
             self.update_best_game()
@@ -230,16 +228,20 @@ class LLMAgent:
             score = 0
             for t in range(max_t):
 
+                image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
+                if t % save_interval == 0:
+                    image_filepath = os.path.join(state_dir, f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png')
+                    save_image_to_file(image, image_filepath)
                 self.current_game_state.game_state_description = (
-                    self.describe_frames(frames, self.current_game_state.entities_encountered))
-
+                    self.describe_consecutive_screenshots(frames, self.current_game_state.entities_encountered))
                 llm_messages = get_llm_messages_to_update_game_state()
                 llm_result = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
                 action = update_game_state_and_act(llm_result, self.current_game_state, self.game_info)
 
                 # execute the action and get the reward from the environment
                 next_raw_state, reward, done, truncated, info = env.step(action)
-                next_state_frame = preprocess_frame(next_raw_state, self.game_info.crop_values)
+                next_state_frame = preprocess_frame(next_raw_state, self.game_info.crop_values, keep_color=True)
+
                 # Update the state stack with the new frame
                 next_frames = np.append(frames[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
 

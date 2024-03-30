@@ -1,13 +1,13 @@
 import io
-
 import numpy as np
-from PIL import Image
 import base64
+from PIL import Image
 
 
-def preprocess_frame(frame, crop_values):
-    gray_frame = convert_to_grayscale(frame)
-    resized_frame = resize_frame(gray_frame, 84, 110)
+def preprocess_frame(frame, crop_values, keep_color=False):
+    if not keep_color:
+        frame = convert_to_grayscale(frame)
+    resized_frame = resize_frame(frame, 84, 110)
     # Crop to 84x84 (roughly the playing area)
     crop_start, crop_end = crop_values
     cropped_frame = resized_frame[crop_start:crop_end, :]
