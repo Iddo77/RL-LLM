@@ -20,7 +20,7 @@ from utils import parse_json_from_substring
 def query_image_with_text(image, text):
 
     base64_image = convert_image_to_base64(image)
-    chat = ChatOpenAI(model='gpt-4-vision-preview', max_tokens=512)
+    chat = ChatOpenAI(model='gpt-4-vision-preview', max_tokens=256)
     response = chat.invoke(
         [
             HumanMessage(
@@ -48,15 +48,15 @@ def get_llm_messages_to_update_game_state():
 {game_state}
 
 ### INSTRUCTIONS
-- Describe the entities in the current frame state and their positions. Use existing entities as much as possible. 
+- Describe all entities in the current game state as detailed in recent_frames_and_motion_summary, including their position and motion. Reuse existing entities as much as possible.
 - Describe a world model in a few short sentences.
 - Give the next action, by choosing one from the available actions. Try to vary your actions if you don't know what to do.
 
 ### RESULT
-Create a json containing entities_in_game_state and next_action. Write nothing else. For example:
+Create a json containing the world model, the entities, and the next action. Write nothing else. For example:
 {
-    "entities_in_game_state": [{"name": "duck", "position": "bottom-left"}],
-   "world_model": "A game to hunt ducks"
+    "world_model": "A game to hunt ducks"
+    "entities": [{"name": "duck", "position": "bottom-left", "motion": "moving to the left"}],
     "next_action": "FIRE"
 }"""
 
@@ -65,7 +65,7 @@ Create a json containing entities_in_game_state and next_action. Write nothing e
     prompt_text = prompt_text.replace('}', '}}')
     prompt_text = prompt_text.replace('{{game_state}}', '{game_state}')
 
-    system_message = SystemMessage("You are an RL agent playing a game.")
+    system_message = SystemMessage("You are an RL agent playing an Atari game.")
     prompt_template = HumanMessagePromptTemplate.from_template(input_variables=["game_state"], template=prompt_text)
     return [system_message, prompt_template]
 
@@ -125,18 +125,23 @@ def invoke_llm_and_parse_result(llm: ChatOpenAI,
 
 def update_game_state_and_act(llm_result: dict, game_state: GameState, game_info: GameInfo):
 
-    if "entities_in_game_state" in llm_result:
+    if "entities" in llm_result:
         valid_entities = []
-        entities = llm_result["entities_in_game_state"]
+        entities = llm_result["entities"]
         if isinstance(entities, list):
             for ent in entities:
                 if isinstance(ent, dict):
                     name = ent.get("name")
                     position = ent.get("position")
                     if name is not None and position is not None:
+                        if "motion" not in ent:
+                            ent["motion"] = "unknown"
                         valid_entities.append(ent)
-                        if name not in game_state.entities_encountered:
-                            game_state.entities_encountered.append(name)
+                        if name not in game_state.previously_encountered_entities:
+                            game_state.previously_encountered_entities.append(name)
+
+        if valid_entities:
+            game_state.entities_in_previous_game_state = valid_entities
 
     if "world_model" in llm_result:
         game_state.world_model = llm_result["world_model"]
@@ -185,18 +190,24 @@ class LLMAgent:
         return self.current_game_state
 
     @staticmethod
-    def describe_consecutive_screenshots(image, expected_entities) -> str:
-        if len(expected_entities):
-            extra_text = (f"Previously these entities were encountered: {', '.join(expected_entities)}."
-                          f" Try to describe the frames using these terms.")
+    def describe_consecutive_screenshots(image, world_model, expected_entities) -> str:
+
+        prompt_start = "This image contains 4 consecutive frames from an Atari game.\n"
+
+        if world_model:
+            prompt_world_model = f"World model: {world_model}"
         else:
-            extra_text = ""
+            prompt_world_model = "Which game do you think it is?"
 
-        text = '\n'.join(["Describe these four consecutive game frames individually, "
-                          "then summarize the overall action or motion.",
-                          extra_text, "Do not write anything else."])
+        if len(expected_entities):
+            prompt_ents = f"Entities encountered previously: {', '.join(expected_entities)}.\n"
+        else:
+            prompt_ents = ""
 
-        response = query_image_with_text(image, text)
+        prompt_end = "Describe these four consecutive game frames individually, then summarize the overall action or motion."
+
+        prompt = '\n'.join([prompt_start, prompt_world_model, prompt_ents, prompt_end])
+        response = query_image_with_text(image, prompt)
         return response.content
 
     def update_best_game(self):
@@ -232,8 +243,9 @@ class LLMAgent:
                 if t % save_interval == 0:
                     image_filepath = os.path.join(state_dir, f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png')
                     save_image_to_file(image, image_filepath)
-                self.current_game_state.game_state_description = (
-                    self.describe_consecutive_screenshots(frames, self.current_game_state.entities_encountered))
+                self.current_game_state.recent_frames_and_motion_summary = (
+                    self.describe_consecutive_screenshots(image, self.current_game_state.world_model,
+                                                          self.current_game_state.previously_encountered_entities))
                 llm_messages = get_llm_messages_to_update_game_state()
                 llm_result = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
                 action = update_game_state_and_act(llm_result, self.current_game_state, self.game_info)
