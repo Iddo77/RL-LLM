@@ -288,11 +288,12 @@ class LLMAgent:
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_game_state)
 
-    def train(self, env, n_episodes=100, max_t=1000, save_image_interval=4):
+    def train(self, env, n_episodes=10, max_t=2000, save_image_interval=4):
 
         csv_file_path = os.path.join(self.log_folder, 'rewards.csv')
 
         rewards = []
+        total_t = 0
 
         with open(csv_file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
@@ -312,9 +313,11 @@ class LLMAgent:
                 self.init_game()
 
                 last_action = 0  # NOOP
+                t = 0
                 lives = info['lives']
+                game_over = False
 
-                for t in range(max_t):
+                while not game_over:
 
                     image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
                     if t % save_image_interval == 0:
@@ -350,6 +353,9 @@ class LLMAgent:
                     frames = next_frames
                     rewards.append(reward)
                     lives = info['lives']
+                    total_t += 1  # total time-steps so far
+                    t += 1  # time-steps in this episode
+                    game_over = done or truncated
 
                     # log results in multiple ways
                     writer.writerow([i_episode, t, action, lives, reward, round(np.mean(rewards), 2),
@@ -360,8 +366,8 @@ class LLMAgent:
                           f'Total reward: {self.current_game_state.total_reward}')
                     log_game_event(i_episode, t, lives, action, reward, self.current_game_state, self.game_log)
 
-                    if done or truncated:
-                        break
+                    if total_t >= max_t:
+                        return
 
 
 if __name__ == '__main__':
