@@ -182,6 +182,20 @@ def update_guidelines(llm_result: dict, game_state: GameState):
                 game_state.guidelines["actions_to_avoid"] = new_actions_to_avoid
 
 
+def log_game_event(episode, time_step, lives, action, reward, game_state, file_path):
+    event = {
+        "episode": episode,
+        "time_step": time_step,
+        "lives": lives,
+        "action": action,
+        "reward": reward,
+        "game_state": game_state.to_json()  # Assuming game_state has a to_json() method
+    }
+    with open(file_path, 'a') as file:
+        json.dump(event, file)
+        file.write('\n')  # Write each event on a new line
+
+
 class LLMAgent:
     def __init__(self, game_info: GameInfo):
         self.game_info = game_info
@@ -194,6 +208,7 @@ class LLMAgent:
         self.log_folder = os.path.join(base_folder, datetime.now().strftime('%Y-%m-%d_%H.%M'))
         os.makedirs(self.log_folder, exist_ok=True)
         self.init_logging()
+        self.game_log = os.path.join(self.log_folder, 'game_log.jsonl')
 
     def init_logging(self):
         log_filename = os.path.join(self.log_folder, 'LLMAgent.log')
@@ -355,10 +370,14 @@ class LLMAgent:
                     rewards.append(reward)
                     lives = info['lives']
 
-                    writer.writerow([i_episode, t, action, lives, reward, round(np.mean(rewards), 2), sum(rewards)])
+                    # log results in multiple ways
+                    writer.writerow([i_episode, t, action, lives, reward, round(np.mean(rewards), 2),
+                                     self.current_game_state.total_reward])
                     print(f'Episode: {i_episode}  Time step: {t}  Action: {self.game_info.actions[action]}  '
                           f'Lives:  {lives}  Reward: {reward}  '
-                          f'Average reward: {round(np.mean(rewards), 2)}  Total reward: {sum(rewards)}')
+                          f'Average reward: {round(np.mean(rewards), 2)}  '
+                          f'Total reward: {self.current_game_state.total_reward}')
+                    log_game_event(i_episode, t, lives, action, reward, self.current_game_state, self.game_log)
 
                     if done or truncated:
                         break
