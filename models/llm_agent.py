@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import csv
 import numpy as np
 import gymnasium as gym
 from datetime import datetime
@@ -294,74 +295,79 @@ class LLMAgent:
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_game_state)
 
-    def train(self, env, n_episodes=100, max_t=1000, save_interval=4, log_interval=10):
-        scores = []
+    def train(self, env, n_episodes=100, max_t=1000, save_image_interval=4):
 
-        for i_episode in range(1, n_episodes + 1):
-            # Reset the environment and preprocess the initial state
-            raw_state, info = env.reset()
-            # The raw state is a screen-dump of the game.
-            # It is resized to 84x84 and turned to grayscale during preprocessing.
-            first_frame = preprocess_frame(raw_state, self.game_info.crop_values, keep_color=True)
-            frames = np.stack([first_frame] * 4, axis=0)  # Stack the initial state 4 times
+        csv_file_path = os.path.join(self.log_folder, 'rewards.csv')
 
-            self.update_best_game()
-            self.init_game()
+        rewards = []
 
-            score = 0
-            last_action = 0  # NOOP
-            lives = info['lives']
+        with open(csv_file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
 
-            for t in range(max_t):
+            # Write header row
+            writer.writerow(['episode', 'time_step', 'action', 'lives', 'reward', 'avg_reward', 'total_reward'])
 
-                image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
-                if t % save_interval == 0:
-                    filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
-                    save_image_to_file(image, os.path.join(self.log_folder, filename))
+            for i_episode in range(1, n_episodes + 1):
+                # Reset the environment and preprocess the initial state
+                raw_state, info = env.reset()
+                # The raw state is a screen-dump of the game.
+                # It is resized to 84x84 and turned to grayscale during preprocessing.
+                first_frame = preprocess_frame(raw_state, self.game_info.crop_values, keep_color=True)
+                frames = np.stack([first_frame] * 4, axis=0)  # Stack the initial state 4 times
 
-                action, llm_messages, llm_result = self.act(image, last_action)
+                self.update_best_game()
+                self.init_game()
 
-                # execute the action and get the reward from the environment
-                next_raw_state, reward, done, truncated, info = env.step(action)
-                next_state_frame = preprocess_frame(next_raw_state, self.game_info.crop_values, keep_color=True)
-
-                # Update the state stack with the new frame
-                next_frames = np.append(frames[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
-
-                action_text = self.game_info.actions[action]
-                self.current_game_state.recent_actions = self.current_game_state.recent_actions[1:] + [action_text]
-                self.current_game_state.recent_rewards = self.current_game_state.recent_rewards[1:] + [reward]
-                self.current_game_state.total_reward += reward
-
-                if llm_messages is not None:
-                    if reward > 0:
-                        self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_game_reward())
-                    elif info['lives'] < lives:
-                        game_over = info['lives'] == 0
-                        self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_life_lost(game_over))
-
-                last_action = action
-                frames = next_frames
-                score += reward
+                score = 0
+                last_action = 0  # NOOP
                 lives = info['lives']
 
-                if done or truncated:
-                    break
+                for t in range(max_t):
 
-            scores.append(score)
+                    image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
+                    if t % save_image_interval == 0:
+                        filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
+                        save_image_to_file(image, os.path.join(self.log_folder, filename))
 
-            if i_episode % log_interval == 0:
-                average_score = np.mean(scores[-log_interval:])
-                print(f"Episode {i_episode}/{n_episodes} - Average Score: {average_score}")
+                    action, llm_messages, llm_result = self.act(image, last_action)
 
-        env.close()
-        return scores
+                    # execute the action and get the reward from the environment
+                    next_raw_state, reward, done, truncated, info = env.step(action)
+                    next_state_frame = preprocess_frame(next_raw_state, self.game_info.crop_values, keep_color=True)
+
+                    # Update the state stack with the new frame
+                    next_frames = np.append(frames[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
+
+                    action_text = self.game_info.actions[action]
+                    self.current_game_state.recent_actions = self.current_game_state.recent_actions[1:] + [action_text]
+                    self.current_game_state.recent_rewards = self.current_game_state.recent_rewards[1:] + [reward]
+                    self.current_game_state.total_reward += reward
+
+                    if llm_messages is not None:
+                        if reward > 0:
+                            self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_game_reward())
+                        elif info['lives'] < lives:
+                            game_over = info['lives'] == 0
+                            self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_life_lost(game_over))
+
+                    last_action = action
+                    frames = next_frames
+                    rewards.append(reward)
+                    lives = info['lives']
+
+                    writer.writerow([i_episode, t, action, lives, reward, round(np.mean(rewards), 2), sum(rewards)])
+                    print(f'Episode: {i_episode}  Time step: {t}  Action: {self.game_info.actions[action]}  '
+                          f'Lives:  {lives}  Reward: {reward}  '
+                          f'Average reward: {round(np.mean(rewards), 2)}  Total reward: {sum(rewards)}')
+
+                    if done or truncated:
+                        break
 
 
 if __name__ == '__main__':
-    env = gym.make('BreakoutDeterministic-v4')
+    env_ = gym.make('BreakoutDeterministic-v4')
     agent = LLMAgent(GameInfo.BREAKOUT)
-    scores = agent.train(env)
-    env.close()
+    agent.train(env_)
+    env_.close()
 
 
