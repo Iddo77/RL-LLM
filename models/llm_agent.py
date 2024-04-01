@@ -128,15 +128,6 @@ def get_llm_message_game_reward():
     return HumanMessagePromptTemplate.from_template(template=prompt_text)
 
 
-def invoke_llm_and_parse_result(llm: ChatOpenAI,
-                                llm_messages: list[SystemMessage | HumanMessagePromptTemplate | AIMessage],
-                                game_state: GameState):
-    chat_prompt_template = ChatPromptTemplate.from_messages(llm_messages)
-    chain = LLMChain(llm=llm, prompt=chat_prompt_template)
-    result = chain.invoke({"game_state": game_state.to_json()})
-    return parse_json_from_substring(result["text"])
-
-
 def update_game_state_and_act(llm_result: dict, game_state: GameState, game_info: GameInfo):
 
     if "entities" in llm_result:
@@ -189,11 +180,22 @@ def log_game_event(episode, time_step, lives, action, reward, game_state, file_p
         "lives": lives,
         "action": action,
         "reward": reward,
-        "game_state": game_state.to_json()  # Assuming game_state has a to_json() method
+        "game_state": game_state.to_json()
     }
     with open(file_path, 'a') as file:
         json.dump(event, file)
-        file.write('\n')  # Write each event on a new line
+        file.write('\n')
+
+
+def log_llm_result(episode, time_step, llm_result, file_path):
+    interaction = {
+        "episode": episode,
+        "time_step": time_step,
+        "llm_result": llm_result
+    }
+    with open(file_path, 'a') as file:
+        json.dump(interaction, file)
+        file.write('\n')
 
 
 class LLMAgent:
@@ -209,6 +211,7 @@ class LLMAgent:
         os.makedirs(self.log_folder, exist_ok=True)
         self.init_logging()
         self.game_log = os.path.join(self.log_folder, 'game_log.jsonl')
+        self.llm_log = os.path.join(self.log_folder, 'llm_results_log.jsonl')
 
     def init_logging(self):
         log_filename = os.path.join(self.log_folder, 'LLMAgent.log')
@@ -257,16 +260,15 @@ class LLMAgent:
               self.current_game_state.total_reward > self.best_game_state.total_reward):
             self.best_game_state = self.current_game_state
 
-    def act(self, image, last_action, max_retries=2):
-        if not self.retry_describe_screenshots(image, max_retries):
-            logging.info(f'Proceeding with the last successful action: {last_action}.')
+    def act(self, image, last_action, episode, time_step):
+        if not self.retry_describe_screenshots(image, max_retries=2):
             return last_action, None, None
 
         llm_messages = get_llm_messages_to_update_game_state()
-        llm_result = self.retry_invoke_llm(llm_messages, max_retries)
+        llm_result = self.retry_invoke_llm(llm_messages, max_retries=2, episode=episode, time_step=time_step)
+        llm_result = parse_json_from_substring(llm_result)
 
         if llm_result is None:
-            logging.info(f'Proceeding with the last successful action: {last_action}.')
             return last_action, None, None
 
         action = update_game_state_and_act(llm_result, self.current_game_state, self.game_info)
@@ -289,24 +291,30 @@ class LLMAgent:
                         f"Failed after {retries} attempts: Maximum retries reached for gpt-4-vision-preview.")
                     return False
 
-    def retry_invoke_llm(self, llm_messages, max_retries):
+    def retry_invoke_llm(self, llm_messages, max_retries, episode, time_step):
         retries = 0
         while retries < max_retries:
             try:
-                return invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
+                chat_prompt_template = ChatPromptTemplate.from_messages(llm_messages)
+                chain = LLMChain(llm=self.llm, prompt=chat_prompt_template)
+                result = chain.invoke({"game_state": self.current_game_state.to_json()})
+                log_llm_result(episode, time_step, result["text"], self.llm_log)
+                return result["text"]
             except Exception as e:
                 retries += 1
-                logging.error(f"Retry attempt {retries} failed: Error calling {self.llm.model_name}: {e}. Retrying...")
+                logging.error(f"Episode: {episode}  Time step: {time_step}  "
+                              f"Retry attempt {retries} failed: Error calling {self.llm.model_name}: {e}. Retrying...")
                 if retries == max_retries:
                     logging.error(
                         f"Failed after {retries} attempts: Maximum retries reached for {self.llm.model_name}.")
                     return None
 
-    def update_guidelines_with_llm(self, llm_messages, llm_result, update_guidelines_message):
+    def update_guidelines_with_llm(self, llm_messages, llm_result, update_guidelines_message, episode, time_step):
         ai_message = AIMessage(json.dumps(llm_result, indent=2))
         llm_messages.append(ai_message)
         llm_messages.append(update_guidelines_message)
-        new_guidelines = self.retry_invoke_llm(llm_messages, max_retries=2)
+        llm_result = self.retry_invoke_llm(llm_messages, max_retries=2, episode=episode, time_step=time_step)
+        new_guidelines = parse_json_from_substring(llm_result)
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_game_state)
 
@@ -344,7 +352,7 @@ class LLMAgent:
                         filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
                         save_image_to_file(image, os.path.join(self.log_folder, filename))
 
-                    action, llm_messages, llm_result = self.act(image, last_action)
+                    action, llm_messages, llm_result = self.act(image, last_action, i_episode, t)
 
                     # execute the action and get the reward from the environment
                     next_raw_state, reward, done, truncated, info = env.step(action)
@@ -360,10 +368,12 @@ class LLMAgent:
 
                     if llm_messages is not None:
                         if reward > 0:
-                            self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_game_reward())
+                            self.update_guidelines_with_llm(llm_messages, llm_result,
+                                                            get_llm_message_game_reward(), i_episode, t)
                         elif info['lives'] < lives:
                             game_over = info['lives'] == 0
-                            self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_life_lost(game_over))
+                            self.update_guidelines_with_llm(llm_messages, llm_result,
+                                                            get_llm_message_life_lost(game_over), i_episode, t)
 
                     last_action = action
                     frames = next_frames
