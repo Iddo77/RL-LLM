@@ -26,3 +26,8 @@ def escape_brackets(prompt_text: str, variables: list[str]) -> str:
     for var in variables:
         prompt_text = prompt_text.replace('{{' + var + '}}', '{' + var + '}')
     return prompt_text
+
+
+def trim_list(lst: list, max_size=10):
+    while len(lst) > max_size:
+        lst.pop(0)
