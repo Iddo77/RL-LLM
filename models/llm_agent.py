@@ -169,7 +169,6 @@ def update_game_state_and_act(llm_result: dict, game_state: GameState, game_info
 
 
 def update_guidelines(llm_result: dict, game_state: GameState):
-
     if "guidelines" in llm_result:
         new_guidelines = llm_result["guidelines"]
         if "recommended_actions" in new_guidelines:
@@ -242,6 +241,59 @@ class LLMAgent:
               self.current_game_state.total_reward > self.best_game_state.total_reward):
             self.best_game_state = self.current_game_state
 
+    def act(self, image, last_action, max_retries=2):
+        if not self.retry_describe_screenshots(image, max_retries):
+            logging.info(f'Proceeding with the last successful action: {last_action}.')
+            return last_action, None, None
+
+        llm_messages = get_llm_messages_to_update_game_state()
+        llm_result = self.retry_invoke_llm(llm_messages, max_retries)
+
+        if llm_result is None:
+            logging.info(f'Proceeding with the last successful action: {last_action}.')
+            return last_action, None, None
+
+        action = update_game_state_and_act(llm_result, self.current_game_state, self.game_info)
+
+        return action, llm_messages, llm_result
+
+    def retry_describe_screenshots(self, image, max_retries):
+        retries = 0
+        while retries < max_retries:
+            try:
+                self.current_game_state.recent_frames_and_motion_summary = (
+                    self.describe_consecutive_screenshots(image, self.current_game_state.world_model,
+                                                          self.current_game_state.previously_encountered_entities))
+                return True
+            except Exception as e:
+                retries += 1
+                logging.error(f"Retry attempt {retries} failed: Error calling gpt-4-vision-preview: {e}. Retrying...")
+                if retries == max_retries:
+                    logging.error(
+                        f"Failed after {retries} attempts: Maximum retries reached for gpt-4-vision-preview.")
+                    return False
+
+    def retry_invoke_llm(self, llm_messages, max_retries):
+        retries = 0
+        while retries < max_retries:
+            try:
+                return invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
+            except Exception as e:
+                retries += 1
+                logging.error(f"Retry attempt {retries} failed: Error calling {self.llm.model_name}: {e}. Retrying...")
+                if retries == max_retries:
+                    logging.error(
+                        f"Failed after {retries} attempts: Maximum retries reached for {self.llm.model_name}.")
+                    return None
+
+    def update_guidelines_with_llm(self, llm_messages, llm_result, update_guidelines_message):
+        ai_message = AIMessage(json.dumps(llm_result, indent=2))
+        llm_messages.append(ai_message)
+        llm_messages.append(update_guidelines_message)
+        new_guidelines = self.retry_invoke_llm(llm_messages, max_retries=2)
+        if new_guidelines is not None:
+            update_guidelines(new_guidelines, self.current_game_state)
+
     def train(self, env, n_episodes=100, max_t=1000, save_interval=4, log_interval=10):
         scores = []
 
@@ -257,6 +309,7 @@ class LLMAgent:
             self.init_game()
 
             score = 0
+            last_action = 0  # NOOP
             lives = info['lives']
 
             for t in range(max_t):
@@ -266,12 +319,7 @@ class LLMAgent:
                     filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
                     save_image_to_file(image, os.path.join(self.log_folder, filename))
 
-                self.current_game_state.recent_frames_and_motion_summary = (
-                    self.describe_consecutive_screenshots(image, self.current_game_state.world_model,
-                                                          self.current_game_state.previously_encountered_entities))
-                llm_messages = get_llm_messages_to_update_game_state()
-                llm_result = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
-                action = update_game_state_and_act(llm_result, self.current_game_state, self.game_info)
+                action, llm_messages, llm_result = self.act(image, last_action)
 
                 # execute the action and get the reward from the environment
                 next_raw_state, reward, done, truncated, info = env.step(action)
@@ -285,24 +333,17 @@ class LLMAgent:
                 self.current_game_state.recent_rewards = self.current_game_state.recent_rewards[1:] + [reward]
                 self.current_game_state.total_reward += reward
 
-                if reward > 0:
-                    ai_message = AIMessage(json.dumps(llm_result, indent=2))
-                    llm_messages.append(ai_message)
-                    llm_messages.append(get_llm_message_game_reward())
-                    new_guidelines = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
-                    update_guidelines(new_guidelines, self.current_game_state)
-                    pass
+                if llm_messages is not None:
+                    if reward > 0:
+                        self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_game_reward())
+                    elif info['lives'] < lives:
+                        game_over = info['lives'] == 0
+                        self.update_guidelines_with_llm(llm_messages, llm_result, get_llm_message_life_lost(game_over))
 
+                last_action = action
                 frames = next_frames
                 score += reward
-
-                if info['lives'] < lives:
-                    lives = info['lives']
-                    ai_message = AIMessage(json.dumps(llm_result, indent=2))
-                    llm_messages.append(ai_message)
-                    llm_messages.append(get_llm_message_life_lost(lives == 0))
-                    new_guidelines = invoke_llm_and_parse_result(self.llm, llm_messages, self.current_game_state)
-                    update_guidelines(new_guidelines, self.current_game_state)
+                lives = info['lives']
 
                 if done or truncated:
                     break
