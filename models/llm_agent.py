@@ -1,7 +1,9 @@
 import json
 import os
+import logging
 import numpy as np
 import gymnasium as gym
+from datetime import datetime
 from langchain.chains.llm import LLMChain
 from langchain_core.messages import SystemMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, PromptTemplate
@@ -187,6 +189,18 @@ class LLMAgent:
         self.best_game_state: GameState | None = None
         self.llm = ChatOpenAI(temperature=1, model_name='gpt-3.5-turbo', max_tokens=256)
 
+        # set up folder for logging
+        base_folder = os.path.join(os.path.dirname(__file__), 'LLM')
+        self.log_folder = os.path.join(base_folder, datetime.now().strftime('%Y-%m-%d_%H.%M'))
+        os.makedirs(self.log_folder, exist_ok=True)
+        self.init_logging()
+
+    def init_logging(self):
+        log_filename = os.path.join(self.log_folder, 'LLMAgent.log')
+        logging.basicConfig(filename=log_filename, level=logging.INFO,
+                            format='%(asctime)s - %(levelname)s - %(message)s')
+        logging.info("LLM Agent logging initialized.")
+
     def init_game(self) -> GameState:
 
         if self.best_game_state is not None:
@@ -228,10 +242,8 @@ class LLMAgent:
               self.current_game_state.total_reward > self.best_game_state.total_reward):
             self.best_game_state = self.current_game_state
 
-    def train(self, env, n_episodes=100, max_t=1000, save_interval=20, log_interval=10, state_dir='LLM/state'):
+    def train(self, env, n_episodes=100, max_t=1000, save_interval=4, log_interval=10):
         scores = []
-        if not os.path.exists(state_dir):
-            os.makedirs(state_dir)
 
         for i_episode in range(1, n_episodes + 1):
             # Reset the environment and preprocess the initial state
@@ -252,7 +264,7 @@ class LLMAgent:
                 image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
                 if t % save_interval == 0:
                     filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
-                    save_image_to_file(image, os.path.join(state_dir, filename))
+                    save_image_to_file(image, os.path.join(self.log_folder, filename))
 
                 self.current_game_state.recent_frames_and_motion_summary = (
                     self.describe_consecutive_screenshots(image, self.current_game_state.world_model,
