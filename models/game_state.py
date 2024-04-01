@@ -11,8 +11,8 @@ class GameState:
         self.recent_actions = ['NOOP'] * 4
         self.recent_rewards = [0.0] * 4
         self.guidelines = {
-            "recommended_actions": [],
-            "actions_to_avoid": []
+            "recommendations": [],
+            "things_to_avoid": []
         }
         self.total_reward = 0.0
 

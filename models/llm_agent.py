@@ -71,56 +71,23 @@ Create a json containing the world model, the entities, and the next action. Wri
     return [system_message, prompt_template]
 
 
-def get_llm_message_life_lost(is_game_over: bool):
-
-    if is_game_over:
-        prompt_start = 'Game over!!!'
-    else:
-        prompt_start = 'You lost a life!'
-
-    prompt_text = prompt_start + """
-    
-Do you want to to update the guidelines for future games?
+def get_update_guidelines_message(prefix):
+    prompt_text = prefix + """You should update the guidelines for what to do in the future. 
+For example: Choose LEFT if the crosshair is to the right of the target.
 
 Respond with a json like this:
 
    {
        "guidelines": {
-            "recommended_actions": [],
-            "actions_to_avoid": []
+            "recommendations": a list of short recommendations about what to do,
+            "things_to_avoid": a list of short rules about what not to do
         }
    }
 
-When responding, make sure to copy all existing guidelines that you want to keep. You can expand the list if you think you can do better in the future. 
-If you have no new ideas, then just copy the old guidelines without adding anything new. 
+Keep existing guidelines as much as possible, but make sure the lists do not exceed 10 rules each.
 
 Respond with the json only and write nothing else.
-    """
-    # escape brackets in json, otherwise validation of langchain will fail
-    prompt_text = escape_brackets(prompt_text, [])
-
-    return HumanMessagePromptTemplate.from_template(template=prompt_text)
-
-
-def get_llm_message_game_reward():
-    prompt_text = """You received a reward following your last action! That means you did something right. 
-
-    Do you want to to update the guidelines for future games?
-
-    Respond with a json like this:
-
-       {
-           "guidelines": {
-                "recommended_actions": [],
-                "actions_to_avoid": []
-            }
-       }
-
-    When responding, make sure to copy all existing guidelines that you want to keep. You can expand the list if you think you know why you got the reward.
-    If you have no new ideas, then just copy the old guidelines without adding anything new. 
-
-    Respond with the json only and write nothing else.
-    """
+"""
 
     # escape brackets in json, otherwise validation of langchain will fail
     prompt_text = escape_brackets(prompt_text, [])
@@ -163,14 +130,14 @@ def update_game_state_and_act(llm_result: dict, game_state: GameState, game_info
 def update_guidelines(llm_result: dict, game_state: GameState):
     if "guidelines" in llm_result:
         new_guidelines = llm_result["guidelines"]
-        if "recommended_actions" in new_guidelines:
-            new_recommended_actions = new_guidelines["recommended_actions"]
-            if len(new_recommended_actions) >= len(game_state.guidelines["recommended_actions"]):
-                game_state.guidelines["recommended_actions"] = new_recommended_actions
-        if "actions_to_avoid" in new_guidelines:
-            new_actions_to_avoid = new_guidelines["actions_to_avoid"]
-            if len(new_actions_to_avoid) >= len(game_state.guidelines["actions_to_avoid"]):
-                game_state.guidelines["actions_to_avoid"] = new_actions_to_avoid
+        if "recommendations" in new_guidelines:
+            new_recommendations = new_guidelines["recommendations"]
+            if len(new_recommendations) >= len(game_state.guidelines["recommendations"]):
+                game_state.guidelines["recommendations"] = new_recommendations
+        if "things_to_avoid" in new_guidelines:
+            new_things_to_avoid = new_guidelines["things_to_avoid"]
+            if len(new_things_to_avoid) >= len(game_state.guidelines["things_to_avoid"]):
+                game_state.guidelines["things_to_avoid"] = new_things_to_avoid
 
 
 def log_game_event(episode, time_step, lives, action, reward, game_state, file_path):
@@ -204,6 +171,8 @@ class LLMAgent:
         self.current_game_state: GameState | None = None
         self.best_game_state: GameState | None = None
         self.llm = ChatOpenAI(temperature=1, model_name='gpt-3.5-turbo', max_tokens=256)
+        # GPT 3.5 is not smart enough to update guidelines, so GPT-4 is used for that
+        self.llm_guide = ChatOpenAI(temperature=1, model_name='gpt-4-turbo-preview', max_tokens=512)
 
         # set up folder for logging
         base_folder = os.path.join(os.path.dirname(__file__), 'LLM')
@@ -265,7 +234,7 @@ class LLMAgent:
             return last_action, None, None
 
         llm_messages = get_llm_messages_to_update_game_state()
-        llm_result = self.retry_invoke_llm(llm_messages, max_retries=2, episode=episode, time_step=time_step)
+        llm_result = self.retry_invoke_llm(self.llm, llm_messages, max_retries=2, episode=episode, time_step=time_step)
         llm_result = parse_json_from_substring(llm_result)
 
         if llm_result is None:
@@ -291,29 +260,30 @@ class LLMAgent:
                         f"Failed after {retries} attempts: Maximum retries reached for gpt-4-vision-preview.")
                     return False
 
-    def retry_invoke_llm(self, llm_messages, max_retries, episode, time_step):
+    def retry_invoke_llm(self, llm, llm_messages, max_retries, episode, time_step):
         retries = 0
         while retries < max_retries:
             try:
                 chat_prompt_template = ChatPromptTemplate.from_messages(llm_messages)
-                chain = LLMChain(llm=self.llm, prompt=chat_prompt_template)
+                chain = LLMChain(llm=llm, prompt=chat_prompt_template)
                 result = chain.invoke({"game_state": self.current_game_state.to_json()})
                 log_llm_result(episode, time_step, result["text"], self.llm_log)
                 return result["text"]
             except Exception as e:
                 retries += 1
                 logging.error(f"Episode: {episode}  Time step: {time_step}  "
-                              f"Retry attempt {retries} failed: Error calling {self.llm.model_name}: {e}. Retrying...")
+                              f"Retry attempt {retries} failed: Error calling {llm.model_name}: {e}. Retrying...")
                 if retries == max_retries:
                     logging.error(
-                        f"Failed after {retries} attempts: Maximum retries reached for {self.llm.model_name}.")
+                        f"Failed after {retries} attempts: Maximum retries reached for {llm.model_name}.")
                     return None
 
     def update_guidelines_with_llm(self, llm_messages, llm_result, update_guidelines_message, episode, time_step):
         ai_message = AIMessage(json.dumps(llm_result, indent=2))
         llm_messages.append(ai_message)
         llm_messages.append(update_guidelines_message)
-        llm_result = self.retry_invoke_llm(llm_messages, max_retries=2, episode=episode, time_step=time_step)
+        llm_result = self.retry_invoke_llm(self.llm_guide, llm_messages, max_retries=2,
+                                           episode=episode, time_step=time_step)
         new_guidelines = parse_json_from_substring(llm_result)
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_game_state)
@@ -341,7 +311,6 @@ class LLMAgent:
                 self.update_best_game()
                 self.init_game()
 
-                score = 0
                 last_action = 0  # NOOP
                 lives = info['lives']
 
@@ -368,12 +337,14 @@ class LLMAgent:
 
                     if llm_messages is not None:
                         if reward > 0:
+                            prefix = ('You received a reward following your last action! '
+                                      'That means you did something right.\n\n')
                             self.update_guidelines_with_llm(llm_messages, llm_result,
-                                                            get_llm_message_game_reward(), i_episode, t)
+                                                            get_update_guidelines_message(prefix), i_episode, t)
                         elif info['lives'] < lives:
-                            game_over = info['lives'] == 0
+                            prefix = 'You lost a life!\n\n'
                             self.update_guidelines_with_llm(llm_messages, llm_result,
-                                                            get_llm_message_life_lost(game_over), i_episode, t)
+                                                            get_update_guidelines_message(prefix), i_episode, t)
 
                     last_action = action
                     frames = next_frames
