@@ -17,11 +17,12 @@ def train_atari_supersuit(steps: int = 10_000, seed: int | None = 0):
         steps (int): The total number of timesteps for which to train the model.
         seed (int | None): An optional seed for environment randomization.
     """ 
+    env_name = boxing_v2.env()
     env = boxing_v2.parallel_env()
 
     env.reset(seed=seed)
 
-    print(f"Starting training on {env.metadata['name']}.")
+    print(f"Starting training on {env_name}.")
 
     # SuperSuit wrappers
     env = ss.color_reduction_v0(env, mode='B')  # Color reduction
@@ -41,10 +42,11 @@ def train_atari_supersuit(steps: int = 10_000, seed: int | None = 0):
 
     model.learn(total_timesteps=steps)
 
-    model.save(f"{env.metadata.get('name')}_{time.strftime('%Y%m%d-%H%M%S')}")
+    model.save(f"{env_name}_{time.strftime('%Y%m%d-%H%M%S')}")
 
     print("Model has been saved.")
-    print(f"Finished training on {env.metadata['name']}.")
+    #print(f"Finished training on {env.metadata['name']}.")
+    print(f"Finished training on {env_name}")
 
     env.close()
 
@@ -56,12 +58,21 @@ def eval_atari_supersuit(num_games: int = 100, render_mode: str | None = None):
         num_games (int): The number of games to play for evaluation.
         render_mode (str | None): The rendering mode. Use 'human' for visual output or None for no rendering.
     """
-    env = boxing_v2.env(render_mode=render_mode)
+    raw_env = boxing_v2.parallel_env()
+    env_name = "boxing_v2"
 
-    print(f"\nStarting evaluation on {env.metadata['name']} (num_games={num_games}, render_mode={render_mode})")
+    print(f"\nStarting evaluation on {env_name} (num_games={num_games}, render_mode={render_mode})")
+
+    # Apply the same preprocessing as during training
+    env = ss.color_reduction_v0(raw_env, mode='B')
+    env = ss.resize_v1(env, x_size=84, y_size=84)
+    env = ss.frame_stack_v1(env, 4)
+
+    env = ss.pettingzoo_env_to_vec_env_v1(env)
+    env = ss.concat_vec_envs_v1(env, 1, num_cpus=1, base_class='stable_baselines3')
 
     try:
-        latest_policy = max(glob.glob(f"{env.metadata['name']}*.zip"), key=os.path.getctime)
+        latest_policy = max(glob.glob(f"{env_name}*.zip"), key=os.path.getctime)
     except ValueError:
         print("Policy not found.")
         return
@@ -71,19 +82,19 @@ def eval_atari_supersuit(num_games: int = 100, render_mode: str | None = None):
     rewards = []
 
     for _ in range(num_games):
-        env.reset()
+        obs = env.reset()
         cumulative_reward = 0
 
-        for agent in env.agent_iter():
-            observation, reward, termination, truncation, info = env.last()
+        while True:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, done, _ = env.step(action)
             cumulative_reward += reward
 
-            if termination or truncation:
-                action = None
-            else:
-                action, _ = model.predict(observation, deterministic=True)
+            if render_mode == 'human':
+                raw_env.render()
 
-            env.step(action)
+            if done[0]:
+                break
 
         rewards.append(cumulative_reward)
 
@@ -92,6 +103,6 @@ def eval_atari_supersuit(num_games: int = 100, render_mode: str | None = None):
     env.close()
 
 if __name__ == "__main__":
-    train_atari_supersuit(steps=1_000_000, seed=42)
+    train_atari_supersuit(steps=1_000_000, seed=42) # Comment when only evaluation is needed
     eval_atari_supersuit(num_games=10, render_mode=None)
     eval_atari_supersuit(num_games=2, render_mode="human")  # Watch the trained agent
