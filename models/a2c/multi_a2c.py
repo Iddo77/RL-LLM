@@ -8,7 +8,7 @@ from stable_baselines3 import A2C
 
 from pettingzoo.atari import boxing_v2
 
-def train_atari_supersuit(steps: int = 10_000, seed: int | None = 0):
+def train_atari_supersuit(env_fn, steps: int = 10_000, seed: int | None = 0):
     """
     Trains a A2C model on the Boxing environment from PettingZoo's Atari collection,
     with preprocessing steps.
@@ -18,26 +18,28 @@ def train_atari_supersuit(steps: int = 10_000, seed: int | None = 0):
         seed (int | None): An optional seed for environment randomization.
     """ 
     env_name = boxing_v2.env()
-    env = boxing_v2.parallel_env()
-
-    env.reset(seed=seed)
-
-    print(f"Starting training on {env_name}.")
+    env = env_fn.parallel_env()
 
     # SuperSuit wrappers
     env = ss.color_reduction_v0(env, mode='B')  # Color reduction
     env = ss.resize_v1(env, x_size=84, y_size=84)  # Resize for CNN
     env = ss.frame_stack_v1(env, 4)  # Frame stacking
     
+    env.reset(seed=seed)
+
+    print(f"Starting training on {env_name}.")
+
     # Convert to VecEnv for Stable Baselines3
     env = ss.pettingzoo_env_to_vec_env_v1(env)
-    env = ss.concat_vec_envs_v1(env, 8, num_cpus=2, base_class="stable_baselines3")
+    env = ss.concat_vec_envs_v1(env, 8, num_cpus=1, base_class="stable_baselines3")
 
     model = A2C(
         "CnnPolicy",
         env,
         verbose=3,
-        learning_rate=1e-3
+        # learning_rate=1e-3,
+        ent_coef=0.01,
+        vf_coef=0.25,
     )
 
     model.learn(total_timesteps=steps)
@@ -45,12 +47,11 @@ def train_atari_supersuit(steps: int = 10_000, seed: int | None = 0):
     model.save(f"{env_name}_{time.strftime('%Y%m%d-%H%M%S')}")
 
     print("Model has been saved.")
-    #print(f"Finished training on {env.metadata['name']}.")
     print(f"Finished training on {env_name}")
 
     env.close()
 
-def eval_atari_supersuit(num_games: int = 100, render_mode: str | None = None):
+def eval_atari_supersuit(env_fn, num_games: int = 100, render_mode: str | None = None):
     """
     Evaluates a trained A2C model on the Boxing environment from PettingZoo's Atari collection.
     
@@ -58,18 +59,15 @@ def eval_atari_supersuit(num_games: int = 100, render_mode: str | None = None):
         num_games (int): The number of games to play for evaluation.
         render_mode (str | None): The rendering mode. Use 'human' for visual output or None for no rendering.
     """
-    raw_env = boxing_v2.parallel_env()
+    env = env_fn.env(render_mode=render_mode)
     env_name = "boxing_v2"
 
-    print(f"\nStarting evaluation on {env_name} (num_games={num_games}, render_mode={render_mode})")
-
     # Apply the same preprocessing as during training
-    env = ss.color_reduction_v0(raw_env, mode='B')
+    env = ss.color_reduction_v0(env, mode='B')
     env = ss.resize_v1(env, x_size=84, y_size=84)
     env = ss.frame_stack_v1(env, 4)
 
-    env = ss.pettingzoo_env_to_vec_env_v1(env)
-    env = ss.concat_vec_envs_v1(env, 1, num_cpus=1, base_class='stable_baselines3')
+    print(f"\nStarting evaluation on {env_name} (num_games={num_games}, render_mode={render_mode})")
 
     try:
         latest_policy = max(glob.glob(f"{env_name}*.zip"), key=os.path.getctime)
@@ -79,30 +77,36 @@ def eval_atari_supersuit(num_games: int = 100, render_mode: str | None = None):
 
     model = A2C.load(latest_policy)
 
-    rewards = []
+    rewards = {agent: 0 for agent in env.possible_agents}
 
-    for _ in range(num_games):
-        obs = env.reset()
-        cumulative_reward = 0
+    for i in range(num_games):
+        env.reset(seed=i)
+        
+        for agent in env.agent_iter():
+            obs, reward, termination, truncation, info = env.last()
 
-        while True:
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, _ = env.step(action)
-            cumulative_reward += reward
-
-            if render_mode == 'human':
-                raw_env.render()
-
-            if done[0]:
+            if termination or truncation:
+                for a in env.agents:
+                    rewards[a] += env.rewards[a]
                 break
-
-        rewards.append(cumulative_reward)
-
-    avg_reward = sum(rewards) / num_games
-    print(f"Avg reward: {avg_reward}")
+            else:
+                act = model.predict(obs, deterministic=True)[0]
+            
+            env.step(act)
+        
     env.close()
+        
+    avg_reward = sum(rewards.values()) / len(rewards.values())
+    print(f"Avg reward: {avg_reward}")
+    #env.close()
+    return avg_reward
 
 if __name__ == "__main__":
-    train_atari_supersuit(steps=1_000_000, seed=42) # Comment when only evaluation is needed
-    eval_atari_supersuit(num_games=10, render_mode=None)
-    eval_atari_supersuit(num_games=2, render_mode="human")  # Watch the trained agent
+    env_fn = boxing_v2
+
+    # env_kwargs = dict(
+
+    # )
+    #train_atari_supersuit(env_fn, steps=1_000_000, seed=0) # Comment when only evaluation is needed
+    #eval_atari_supersuit(env_fn, num_games=10, render_mode=None)
+    eval_atari_supersuit(env_fn, num_games=2, render_mode="human")  # Watch the trained agent
