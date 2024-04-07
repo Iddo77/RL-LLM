@@ -27,7 +27,7 @@ class GameState:
         return game_state
 
     @classmethod
-    def from_agent_state(cls, game_state: 'GameState'):
+    def from_game_state(cls, game_state: 'GameState'):
         """Creates a new GameState instance, retaining only previously_encountered_entities, guidelines and
         available_actions from the original."""
         new_instance = cls()

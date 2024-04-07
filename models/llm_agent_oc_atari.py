@@ -19,7 +19,7 @@ from utils import parse_json_from_substring, escape_brackets, trim_list
 
 # and environment variable OPENAI_API_KEY must be set with the OpenAI key
 
-def get_llm_messages_to_update_agent_state():
+def get_llm_messages_to_update_game_state():
     prompt_text = """### CONTEXT
 This is the game state of the game you are playing:
 
@@ -106,8 +106,8 @@ def update_guidelines(llm_result: dict, game_state: GameState):
 class LLMAgentOcAtari:
     def __init__(self, game_info: GameInfo):
         self.game_info = game_info
-        self.current_agent_state: GameState | None = None
-        self.best_agent_state: GameState | None = None
+        self.current_game_state: GameState | None = None
+        self.best_game_state: GameState | None = None
         self.llm = ChatOpenAI(temperature=1, model_name='gpt-3.5-turbo', max_tokens=256)
         # the guide is separate, because it can produce more output tokens
         self.llm_guide = ChatOpenAI(temperature=1, model_name='gpt-4-turbo-preview', max_tokens=512)
@@ -115,36 +115,36 @@ class LLMAgentOcAtari:
 
     def init_game(self) -> GameState:
 
-        if self.best_agent_state is not None:
-            self.current_agent_state = GameState.from_agent_state(self.best_agent_state)
+        if self.best_game_state is not None:
+            self.current_game_state = GameState.from_game_state(self.best_game_state)
         else:
-            self.current_agent_state = GameState()
-            self.current_agent_state.available_actions = self.game_info.actions
+            self.current_game_state = GameState()
+            self.current_game_state.available_actions = self.game_info.actions
 
-        self.current_agent_state.objects_in_previous_frame = "Missing. The game just started"
+        self.current_game_state.objects_in_previous_frame = "Missing. The game just started"
 
-        return self.current_agent_state
+        return self.current_game_state
 
-    def update_best_agent_state(self):
-        if self.current_agent_state is None:
+    def update_best_game_state(self):
+        if self.current_game_state is None:
             return
-        if self.best_agent_state is None and self.current_agent_state.total_reward > 0:
+        if self.best_game_state is None and self.current_game_state.total_reward > 0:
             # no need to keep game states with no rewards
-            self.best_agent_state = self.current_agent_state
-        elif (self.best_agent_state is not None and
-              self.current_agent_state.total_reward > self.best_agent_state.total_reward):
-            self.best_agent_state = self.current_agent_state
+            self.best_game_state = self.current_game_state
+        elif (self.best_game_state is not None and
+              self.current_game_state.total_reward > self.best_game_state.total_reward):
+            self.best_game_state = self.current_game_state
 
     def act(self, last_action, episode, time_step):
 
-        llm_messages = get_llm_messages_to_update_agent_state()
+        llm_messages = get_llm_messages_to_update_game_state()
         llm_result = self.retry_invoke_llm(self.llm, llm_messages, max_retries=2, episode=episode, time_step=time_step)
         llm_result = parse_json_from_substring(llm_result)
 
         if llm_result is None:
             return last_action, None, None
 
-        action = update_game_state_and_act(llm_result, self.current_agent_state, self.game_info)
+        action = update_game_state_and_act(llm_result, self.current_game_state, self.game_info)
 
         return action, llm_messages, llm_result
 
@@ -154,7 +154,7 @@ class LLMAgentOcAtari:
             try:
                 chat_prompt_template = ChatPromptTemplate.from_messages(llm_messages)
                 chain = LLMChain(llm=llm, prompt=chat_prompt_template)
-                result = chain.invoke({"game_state": self.current_agent_state.to_json()})
+                result = chain.invoke({"game_state": self.current_game_state.to_json()})
                 self.game_logger.log_llm_result(episode, time_step, result["text"])
                 return result["text"]
             except Exception as e:
@@ -174,7 +174,7 @@ class LLMAgentOcAtari:
                                            episode=episode, time_step=time_step)
         new_guidelines = parse_json_from_substring(llm_result)
         if new_guidelines is not None:
-            update_guidelines(new_guidelines, self.current_agent_state)
+            update_guidelines(new_guidelines, self.current_game_state)
 
     def train(self, env, max_episodes=5, max_total_time_steps=2000, max_time_steps_per_episode=500,
               save_image_interval=4):
@@ -192,7 +192,7 @@ class LLMAgentOcAtari:
             first_frame = preprocess_frame(raw_state, self.game_info.crop_values, keep_color=True)
             frames = np.stack([first_frame] * 4, axis=0)  # Stack the initial state 4 times
 
-            self.update_best_agent_state()
+            self.update_best_game_state()
             self.init_game()
 
             last_action = 0  # NOOP
@@ -207,7 +207,7 @@ class LLMAgentOcAtari:
                     filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
                     save_image_to_file(image, os.path.join(self.game_logger.log_folder, filename))
 
-                self.current_agent_state.objects_in_current_frame = str(env.objects)
+                self.current_game_state.objects_in_current_frame = str(env.objects)
 
                 action, llm_messages, llm_result = self.act(last_action, i_episode, t)
 
@@ -219,11 +219,11 @@ class LLMAgentOcAtari:
                 frames = np.append(frames[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
 
                 action_text = self.game_info.actions[action]
-                self.current_agent_state.recent_actions.append(action_text)
-                trim_list(self.current_agent_state.recent_actions)
-                self.current_agent_state.recent_rewards.append(reward)
-                trim_list(self.current_agent_state.recent_rewards)
-                self.current_agent_state.total_reward += reward
+                self.current_game_state.recent_actions.append(action_text)
+                trim_list(self.current_game_state.recent_actions)
+                self.current_game_state.recent_rewards.append(reward)
+                trim_list(self.current_game_state.recent_rewards)
+                self.current_game_state.total_reward += reward
 
                 if llm_messages is not None:
                     if reward > 0:
@@ -248,11 +248,11 @@ class LLMAgentOcAtari:
                 t += 1  # time-steps in this episode
                 game_over = done or truncated
 
-                self.game_logger.log_game_data(i_episode, t, action, lives, reward, score, self.current_agent_state)
+                self.game_logger.log_game_data(i_episode, t, action, lives, reward, score, self.current_game_state)
 
                 # move current game state to previous (done after logging on purpose)
-                self.current_agent_state.objects_in_previous_frame = self.current_agent_state.objects_in_current_frame
-                self.current_agent_state.objects_in_current_frame = ""
+                self.current_game_state.objects_in_previous_frame = self.current_game_state.objects_in_current_frame
+                self.current_game_state.objects_in_current_frame = ""
 
                 if t >= max_time_steps_per_episode:
                     break
