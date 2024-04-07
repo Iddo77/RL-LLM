@@ -11,6 +11,7 @@ from collections import deque
 
 from models.game_info import GameInfo
 from image_processing import preprocess_frame
+from models.game_logger import DQNGameLogger
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -63,7 +64,8 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, action_size, learn_freq=4, target_update_freq=10000):
+    def __init__(self, game_name, action_size, learn_freq=4, target_update_freq=10000):
+        self.game_name = game_name
         self.action_size = action_size
         self.memory = ReplayBuffer()
         self.model = QNetwork(action_size).to(device)
@@ -78,10 +80,6 @@ class DQNAgent:
         self.learn_freq = learn_freq  # how often to call self.learn()
         self.target_update_freq = target_update_freq  # how often to update the target model
         self.num_steps = 0
-        base_folder = os.path.join(os.path.dirname(__file__), 'DQN')
-        self.log_folder = os.path.join(base_folder, datetime.now().strftime('%Y-%m-%d_%H.%M'))
-        if not os.path.exists(self.log_folder):
-            os.makedirs(self.log_folder)
 
     def act(self, state_tensor):
         # Assume state_tensor is already a PyTorch tensor on the correct device
@@ -118,6 +116,8 @@ class DQNAgent:
 
     def train(self, env, game_info: GameInfo, max_episodes=10000, max_total_time_steps=int(1e6),
               max_time_steps_per_episode=1000, save_interval=100, log_interval=10):
+
+        game_logger = DQNGameLogger(self.game_name, log_interval, save_interval)
         scores = []
 
         for i_episode in range(1, max_episodes + 1):
@@ -170,25 +170,20 @@ class DQNAgent:
                     break
 
             scores.append(score)
-
-            # Logging
-            if i_episode % log_interval == 0:
-                average_score = np.mean(scores[-log_interval:])
-                print(f"Episode:{i_episode}  Time step: {self.num_steps}  Average Score: {average_score}  Epsilon: {self.eps}")
+            game_logger.log_episode(i_episode, score, t, self.eps)
 
             # save weights when save interval is reached
             if i_episode % save_interval == 0:
-                weights_path = os.path.join(self.log_folder, f"weights_episode_{i_episode}.pth")
+                weights_path = os.path.join(game_logger.log_folder, f"weights_episode_{i_episode}.pth")
                 self.save_weights(weights_path)
-                print(f"Weights saved at '{weights_path}' after episode {i_episode}")
 
             if self.num_steps >= max_total_time_steps:
                 break
 
         # save final weights
-        final_weights_path = os.path.join(self.log_folder, "final_weights.pth")
+        final_weights_path = os.path.join(game_logger.log_folder, "final_weights.pth")
         self.save_weights(final_weights_path)
-        print(f"Final weights saved at '{final_weights_path}'")
+        game_logger.log_save_weights(i_episode)
 
         env.close()
         return scores
@@ -210,6 +205,6 @@ class DQNAgent:
 
 if __name__ == '__main__':
     env_ = gym.make('BreakoutNoFrameskip-v4')
-    agent = DQNAgent(env_.action_space.n)
+    agent = DQNAgent('BreakoutNoFrameskip-v4', env_.action_space.n)
     scores_ = agent.train(env_, GameInfo.BREAKOUT)
     env_.close()
