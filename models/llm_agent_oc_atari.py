@@ -20,23 +20,26 @@ from utils import parse_json_from_substring, escape_brackets, trim_list
 # and environment variable OPENAI_API_KEY must be set with the OpenAI key
 
 def get_llm_messages_to_update_agent_state():
-    prompt_text = """### AGENT STATE
+    prompt_text = """### CONTEXT
+This is the game state of the game you are playing:
+
 {game_state}
 
 ### INSTRUCTIONS
 - Describe a world model in a few short sentences (you can keep the old one if it is fine).
-- Describe the current game state in a single sentence. It will be appended to the recent_state_descriptions of the agent state.
-- Describe the transition that occurs between the previous and the current game state as a motion in a single sentence. It will be appended to the recent_motion_descriptions of the agent state.
-- Give the next action, by choosing one from the available actions. Try to vary your actions if you don't know what to do.
+- Calculate the movement of all objects, by subtracting the positions.
+- Describe these motions in a single sentence. For the other stationary objects, mention their position relative to the moving objects.
+- Try to predict where the object will be in the next frame, given the recent_motion_descriptions as well as the new motion description.
+- Give the next action, by choosing one from the available actions. Base your decision on the guidelines and your predictions. Try to vary your actions if you don't know what to do.
 
 ### RESULT
 Create a json containing the world model, the state and motion description, and the next action. Write nothing else. For example:
 {
-    "world_model": "A game to hunt ducks"
-    "state_description": "A duck is on the left and the player is at the bottom in the middle of the screen."
-    "motion_description": "A duck is moving horizontally from right to left",
-    "next_action": "FIRE"
-}"""
+    "world_model": your world model,
+    "current_motion_description": your description of the transition between the previous and the current frame based on your calculations ,
+    "next_action": one of the available actions, based on your predictions
+}
+"""
 
     # escape brackets in json, otherwise validation of langchain will fail
     prompt_text = escape_brackets(prompt_text, ['game_state'])
@@ -74,11 +77,8 @@ def update_game_state_and_act(llm_result: dict, game_state: AgentState, game_inf
 
     if "world_model" in llm_result:
         game_state.world_model = llm_result["world_model"]
-    if "state_description" in llm_result:
-        game_state.recent_state_descriptions.append(llm_result["state_description"])
-        trim_list(game_state.recent_state_descriptions)
-    if "motion_description" in llm_result:
-        game_state.recent_motion_descriptions.append(llm_result["motion_description"])
+    if "current_motion_description" in llm_result:
+        game_state.recent_motion_descriptions.append(llm_result["current_motion_description"])
         trim_list(game_state.recent_motion_descriptions)
 
     action = 0  # NOOP
@@ -121,7 +121,7 @@ class LLMAgentOcAtari:
             self.current_agent_state = AgentState()
             self.current_agent_state.available_actions = self.game_info.actions
 
-        self.current_agent_state.previous_game_state = "Missing. The game just started"
+        self.current_agent_state.objects_in_previous_frame = "Missing. The game just started"
 
         return self.current_agent_state
 
@@ -207,7 +207,7 @@ class LLMAgentOcAtari:
                     filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
                     save_image_to_file(image, os.path.join(self.game_logger.log_folder, filename))
 
-                self.current_agent_state.current_game_state = str(env.objects)
+                self.current_agent_state.objects_in_current_frame = str(env.objects)
 
                 action, llm_messages, llm_result = self.act(last_action, i_episode, t)
 
@@ -251,8 +251,8 @@ class LLMAgentOcAtari:
                 self.game_logger.log_game_data(i_episode, t, action, lives, reward, score, self.current_agent_state)
 
                 # move current game state to previous (done after logging on purpose)
-                self.current_agent_state.previous_game_state = self.current_agent_state.current_game_state
-                self.current_agent_state.current_game_state = ""
+                self.current_agent_state.objects_in_previous_frame = self.current_agent_state.objects_in_current_frame
+                self.current_agent_state.objects_in_current_frame = ""
 
                 if t >= max_time_steps_per_episode:
                     break

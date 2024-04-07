@@ -5,10 +5,9 @@ class AgentState:
     def __init__(self):
         self.world_model = ""
         self.available_actions = []
-        self.previous_game_state = ""
-        self.current_game_state = ""
+        self.objects_in_previous_frame = ""
+        self.objects_in_current_frame = ""
         self.recent_motion_descriptions = []
-        self.recent_state_descriptions = []
         self.recent_actions = []
         self.recent_rewards = []
         self.guidelines = {
