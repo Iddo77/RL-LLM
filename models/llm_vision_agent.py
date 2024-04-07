@@ -1,6 +1,8 @@
 import json
 import os
 import logging
+from datetime import datetime
+
 import numpy as np
 import gymnasium as gym
 from langchain.chains.llm import LLMChain
@@ -250,7 +252,7 @@ class LLMVisionAgent:
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_game_state)
 
-    def train(self, env, max_episodes=50, max_time_steps=3000, save_image_interval=4):
+    def train(self, env, max_episodes=5, max_time_steps=2000, save_image_interval=4):
 
         self.game_logger = GameLogger('LLM-Vision-Agent', self.game_info)
         total_time_steps = 0
@@ -321,7 +323,14 @@ class LLMVisionAgent:
 
 
 if __name__ == '__main__':
+    start_time = datetime.now()
+    print(f"Start Time: {start_time}")
     env_ = gym.make('BreakoutDeterministic-v4')
     agent = LLMVisionAgent(GameInfo.BREAKOUT)
-    agent.train(env_)
+    agent.train(env_, max_episodes=1)
     env_.close()
+    end_time = datetime.now()
+    duration = end_time - start_time
+    print(f"End Time: {end_time}")
+    print(f"Duration: {duration}")
+
