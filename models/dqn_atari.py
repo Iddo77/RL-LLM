@@ -1,5 +1,5 @@
 import os
-
+from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -78,6 +78,10 @@ class DQNAgent:
         self.learn_freq = learn_freq  # how often to call self.learn()
         self.target_update_freq = target_update_freq  # how often to update the target model
         self.num_steps = 0
+        base_folder = os.path.join(os.path.dirname(__file__), 'DQN')
+        self.log_folder = os.path.join(base_folder, datetime.now().strftime('%Y-%m-%d_%H.%M'))
+        if not os.path.exists(self.log_folder):
+            os.makedirs(self.log_folder)
 
     def act(self, state_tensor):
         # Assume state_tensor is already a PyTorch tensor on the correct device
@@ -112,23 +116,21 @@ class DQNAgent:
         loss.backward()
         self.optimizer.step()
 
-    def train(self, env,  game_info: GameInfo, n_episodes=10000, max_t=1000, save_interval=100, log_interval=10,
-              weights_dir='DQN/weights'):
+    def train(self, env, game_info: GameInfo, max_episodes=10000, max_total_time_steps=int(1e6),
+              max_time_steps_per_episode=1000, save_interval=100, log_interval=10):
         scores = []
-        eps_history = []  # To keep track of epsilon over time
-        if not os.path.exists(weights_dir):
-            os.makedirs(weights_dir)
 
-        for i_episode in range(1, n_episodes + 1):
+        for i_episode in range(1, max_episodes + 1):
             # Reset the environment and preprocess the initial state
             raw_state, info = env.reset()
             # The raw state is a screen-dump of the game.
             # It is resized to 84x84 and turned to grayscale during preprocessing.
             state = preprocess_frame(raw_state, game_info.crop_values)
             state = np.stack([state] * 4, axis=0)  # Stack the initial state 4 times
+            lives = info.get('lives', 0)
+            score = 0  # cumulative rewards in episode
 
-            score = 0
-            for t in range(max_t):
+            for t in range(max_time_steps_per_episode):
                 # place state on device
                 state_tensor = torch.tensor(state, device=device, dtype=torch.float).unsqueeze(0)
                 # select an action
@@ -138,8 +140,14 @@ class DQNAgent:
                 next_state_frame = preprocess_frame(next_raw_state, game_info.crop_values)
                 # Update the state stack with the new frame
                 next_state = np.append(state[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
-                # save state in memory
-                self.memory.add(state, action, reward, next_state, done or truncated)
+
+                lvs = info.get('lives', 0)
+                if lvs < lives:
+                    lives = lvs
+                    # force training on life loss
+                    self.memory.add(state, action, min(-1., reward), next_state, done or truncated)
+                else:
+                    self.memory.add(state, action, reward, next_state, done or truncated)
 
                 state = next_state
                 score += reward
@@ -158,27 +166,32 @@ class DQNAgent:
                     self.eps = max(self.eps_min, self.eps_decay * self.eps)
                     break
 
+                if self.num_steps >= max_total_time_steps:
+                    break
+
             scores.append(score)
-            eps_history.append(self.eps)
 
             # Logging
             if i_episode % log_interval == 0:
                 average_score = np.mean(scores[-log_interval:])
-                print(f"Episode {i_episode}/{n_episodes} - Average Score: {average_score}, Epsilon: {self.eps}")
+                print(f"Episode:{i_episode}  Time step: {self.num_steps}  Average Score: {average_score}  Epsilon: {self.eps}")
 
             # save weights when save interval is reached
             if i_episode % save_interval == 0:
-                weights_path = os.path.join(weights_dir, f"weights_episode_{i_episode}.pth")
+                weights_path = os.path.join(self.log_folder, f"weights_episode_{i_episode}.pth")
                 self.save_weights(weights_path)
                 print(f"Weights saved at '{weights_path}' after episode {i_episode}")
 
+            if self.num_steps >= max_total_time_steps:
+                break
+
         # save final weights
-        final_weights_path = os.path.join(weights_dir, "final_weights.pth")
+        final_weights_path = os.path.join(self.log_folder, "final_weights.pth")
         self.save_weights(final_weights_path)
         print(f"Final weights saved at '{final_weights_path}'")
 
         env.close()
-        return scores, eps_history
+        return scores
 
     def load_weights(self, file_path):
         state = torch.load(file_path)
@@ -196,7 +209,7 @@ class DQNAgent:
 
 
 if __name__ == '__main__':
-    env = gym.make('BreakoutNoFrameskip-v4')
-    agent = DQNAgent(env.action_space.n)
-    scores, eps_history = agent.train(env, GameInfo.BREAKOUT)
-    env.close()
+    env_ = gym.make('BreakoutNoFrameskip-v4')
+    agent = DQNAgent(env_.action_space.n)
+    scores_ = agent.train(env_, GameInfo.BREAKOUT)
+    env_.close()
