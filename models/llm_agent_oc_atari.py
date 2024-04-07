@@ -230,6 +230,11 @@ class LLMAgentOcAtari:
                                   'That means you did something right.\n\n')
                         self.update_guidelines_with_llm(llm_messages, llm_result,
                                                         get_update_guidelines_message(prefix), i_episode, t)
+                    elif reward < 0:
+                        prefix = ('You received a penalty following your last action! '
+                                  'That means you did something wrong.\n\n')
+                        self.update_guidelines_with_llm(llm_messages, llm_result,
+                                                        get_update_guidelines_message(prefix), i_episode, t)
                     elif info.get('lives', 0) < lives:
                         prefix = 'You lost a life!\n\n'
                         self.update_guidelines_with_llm(llm_messages, llm_result,
