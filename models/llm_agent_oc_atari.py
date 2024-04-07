@@ -1,6 +1,8 @@
 import json
 import os
 import logging
+from datetime import datetime
+
 import numpy as np
 from langchain.chains.llm import LLMChain
 from langchain_core.messages import SystemMessage, AIMessage
@@ -253,9 +255,13 @@ class LLMAgentOcAtari:
 
 
 if __name__ == '__main__':
+    start_time = datetime.now()
+    print(f"Start Time: {start_time}")
     env_ = OCAtari("BreakoutDeterministic-v4", mode="ram", hud=False, render_mode="rgb_array")
     agent = LLMAgentOcAtari(GameInfo.BREAKOUT)
     agent.train(env_)
     env_.close()
-
-
+    end_time = datetime.now()
+    duration = end_time - start_time
+    print(f"End Time: {end_time}")
+    print(f"Duration: {duration}")

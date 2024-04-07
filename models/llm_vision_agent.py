@@ -327,7 +327,7 @@ if __name__ == '__main__':
     print(f"Start Time: {start_time}")
     env_ = gym.make('BreakoutDeterministic-v4')
     agent = LLMVisionAgent(GameInfo.BREAKOUT)
-    agent.train(env_, max_episodes=1)
+    agent.train(env_)
     env_.close()
     end_time = datetime.now()
     duration = end_time - start_time
