@@ -139,7 +139,7 @@ def update_guidelines(llm_result: dict, game_state: GameState):
                 game_state.guidelines["things_to_avoid"] = new_things_to_avoid
 
 
-class LLMAgent:
+class LLMVisionAgent:
     def __init__(self, game_info: GameInfo):
         self.game_info = game_info
         self.current_game_state: GameState | None = None
@@ -322,6 +322,6 @@ class LLMAgent:
 
 if __name__ == '__main__':
     env_ = gym.make('BreakoutDeterministic-v4')
-    agent = LLMAgent(GameInfo.BREAKOUT)
+    agent = LLMVisionAgent(GameInfo.BREAKOUT)
     agent.train(env_)
     env_.close()
