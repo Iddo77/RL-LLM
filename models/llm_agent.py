@@ -140,13 +140,14 @@ def update_guidelines(llm_result: dict, game_state: GameState):
                 game_state.guidelines["things_to_avoid"] = new_things_to_avoid
 
 
-def log_game_event(episode, time_step, lives, action, reward, game_state, file_path):
+def log_game_event(episode, time_step, lives, action, reward, score, game_state, file_path):
     event = {
         "episode": episode,
         "time_step": time_step,
         "lives": lives,
         "action": action,
         "reward": reward,
+        "score": score,
         "game_state": game_state.to_json()
     }
     with open(file_path, 'a') as file:
@@ -173,10 +174,12 @@ class LLMAgent:
         self.llm = ChatOpenAI(temperature=1, model_name='gpt-3.5-turbo', max_tokens=256)
         # GPT 3.5 is not smart enough to update guidelines, so GPT-4 is used for that
         self.llm_guide = ChatOpenAI(temperature=1, model_name='gpt-4-turbo-preview', max_tokens=512)
+        self.scores = []
 
         # set up folder for logging
-        base_folder = os.path.join(os.path.dirname(__file__), 'LLM')
-        self.log_folder = os.path.join(base_folder, datetime.now().strftime('%Y-%m-%d_%H.%M'))
+        base_folder = os.path.join(os.path.dirname(__file__), 'LLM-Vision')
+        filename = f"{datetime.now().strftime('%Y-%m-%d_%H.%M')}_{agent.game_info.name.capitalize()}"
+        self.log_folder = os.path.join(base_folder, filename)
         os.makedirs(self.log_folder, exist_ok=True)
         self.init_logging()
         self.game_log = os.path.join(self.log_folder, 'game_log.jsonl')
@@ -288,20 +291,19 @@ class LLMAgent:
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_game_state)
 
-    def train(self, env, n_episodes=10, max_t=2000, save_image_interval=4):
+    def train(self, env, max_episodes=50, max_time_steps=3000, save_image_interval=4):
 
         csv_file_path = os.path.join(self.log_folder, 'rewards.csv')
 
-        rewards = []
-        total_t = 0
+        total_time_steps = 0
 
         with open(csv_file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
 
             # Write header row
-            writer.writerow(['episode', 'time_step', 'action', 'lives', 'reward', 'avg_reward', 'total_reward'])
+            writer.writerow(['episode', 'time_step', 'action', 'lives', 'reward', 'score'])
 
-            for i_episode in range(1, n_episodes + 1):
+            for i_episode in range(1, max_episodes + 1):
                 # Reset the environment and preprocess the initial state
                 raw_state, info = env.reset()
                 # The raw state is a screen-dump of the game.
@@ -314,8 +316,9 @@ class LLMAgent:
 
                 last_action = 0  # NOOP
                 t = 0
-                lives = info['lives']
+                lives = info.get('lives', 0)
                 game_over = False
+                score = 0
 
                 while not game_over:
 
@@ -344,29 +347,26 @@ class LLMAgent:
                                       'That means you did something right.\n\n')
                             self.update_guidelines_with_llm(llm_messages, llm_result,
                                                             get_update_guidelines_message(prefix), i_episode, t)
-                        elif info['lives'] < lives:
+                        elif info.get('lives', 0) < lives:
                             prefix = 'You lost a life!\n\n'
                             self.update_guidelines_with_llm(llm_messages, llm_result,
                                                             get_update_guidelines_message(prefix), i_episode, t)
 
                     last_action = action
                     frames = next_frames
-                    rewards.append(reward)
-                    lives = info['lives']
-                    total_t += 1  # total time-steps so far
+                    score += reward
+                    lives = info.get('lives', 0)
+                    total_time_steps += 1  # total time-steps so far
                     t += 1  # time-steps in this episode
                     game_over = done or truncated
 
                     # log results in multiple ways
-                    writer.writerow([i_episode, t, action, lives, reward, round(np.mean(rewards), 2),
-                                     self.current_game_state.total_reward])
+                    writer.writerow([i_episode, t, action, lives, reward, score])
                     print(f'Episode: {i_episode}  Time step: {t}  Action: {self.game_info.actions[action]}  '
-                          f'Lives:  {lives}  Reward: {reward}  '
-                          f'Average reward: {round(np.mean(rewards), 2)}  '
-                          f'Total reward: {self.current_game_state.total_reward}')
-                    log_game_event(i_episode, t, lives, action, reward, self.current_game_state, self.game_log)
+                          f'Lives:  {lives}  Reward: {reward}  Score: {score}')
+                    log_game_event(i_episode, t, lives, action, reward, score, self.current_game_state, self.game_log)
 
-                    if total_t >= max_t:
+                    if total_time_steps >= max_time_steps:
                         return
 
 
