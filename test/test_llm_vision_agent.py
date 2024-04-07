@@ -2,10 +2,10 @@ import unittest
 import numpy as np
 from PIL import Image
 
-from models.llm_agent import query_image_with_text
+from models.llm_vision_agent import query_image_with_text
 
 
-class TestLLMAgent(unittest.TestCase):
+class TestLLMVisionAgent(unittest.TestCase):
     def test_query_image_with_text(self):
         image_array = np.array(Image.open('4-images.png'))
         text = """Describe these four consecutive game frames individually, then summarize the overall action or motion.
