@@ -1,17 +1,16 @@
 import json
 import os
 import logging
-import csv
 import numpy as np
 import gymnasium as gym
-from datetime import datetime
 from langchain.chains.llm import LLMChain
 from langchain_core.messages import SystemMessage, AIMessage
-from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain.schema.messages import HumanMessage
 
 from models.game_info import GameInfo
+from models.game_logger import GameLogger
 from models.game_state import GameState
 from image_processing import preprocess_frame, convert_image_to_base64, merge_images_with_bars, save_image_to_file
 from utils import parse_json_from_substring, escape_brackets
@@ -140,32 +139,6 @@ def update_guidelines(llm_result: dict, game_state: GameState):
                 game_state.guidelines["things_to_avoid"] = new_things_to_avoid
 
 
-def log_game_event(episode, time_step, lives, action, reward, score, game_state, file_path):
-    event = {
-        "episode": episode,
-        "time_step": time_step,
-        "lives": lives,
-        "action": action,
-        "reward": reward,
-        "score": score,
-        "game_state": game_state.to_json()
-    }
-    with open(file_path, 'a') as file:
-        json.dump(event, file)
-        file.write('\n')
-
-
-def log_llm_result(episode, time_step, llm_result, file_path):
-    interaction = {
-        "episode": episode,
-        "time_step": time_step,
-        "llm_result": llm_result
-    }
-    with open(file_path, 'a') as file:
-        json.dump(interaction, file)
-        file.write('\n')
-
-
 class LLMAgent:
     def __init__(self, game_info: GameInfo):
         self.game_info = game_info
@@ -175,21 +148,7 @@ class LLMAgent:
         # GPT 3.5 is not smart enough to update guidelines, so GPT-4 is used for that
         self.llm_guide = ChatOpenAI(temperature=1, model_name='gpt-4-turbo-preview', max_tokens=512)
         self.scores = []
-
-        # set up folder for logging
-        base_folder = os.path.join(os.path.dirname(__file__), 'LLM-Vision')
-        filename = f"{datetime.now().strftime('%Y-%m-%d_%H.%M')}_{agent.game_info.name.capitalize()}"
-        self.log_folder = os.path.join(base_folder, filename)
-        os.makedirs(self.log_folder, exist_ok=True)
-        self.init_logging()
-        self.game_log = os.path.join(self.log_folder, 'game_log.jsonl')
-        self.llm_log = os.path.join(self.log_folder, 'llm_results_log.jsonl')
-
-    def init_logging(self):
-        log_filename = os.path.join(self.log_folder, 'LLMAgent.log')
-        logging.basicConfig(filename=log_filename, level=logging.INFO,
-                            format='%(asctime)s - %(levelname)s - %(message)s')
-        logging.info("LLM Agent logging initialized.")
+        self.game_logger: GameLogger | None = None
 
     def init_game(self) -> GameState:
 
@@ -270,7 +229,7 @@ class LLMAgent:
                 chat_prompt_template = ChatPromptTemplate.from_messages(llm_messages)
                 chain = LLMChain(llm=llm, prompt=chat_prompt_template)
                 result = chain.invoke({"game_state": self.current_game_state.to_json()})
-                log_llm_result(episode, time_step, result["text"], self.llm_log)
+                self.game_logger.log_llm_result(episode, time_step, result["text"])
                 return result["text"]
             except Exception as e:
                 retries += 1
@@ -293,81 +252,72 @@ class LLMAgent:
 
     def train(self, env, max_episodes=50, max_time_steps=3000, save_image_interval=4):
 
-        csv_file_path = os.path.join(self.log_folder, 'rewards.csv')
-
+        self.game_logger = GameLogger('LLM-Vision-Agent', self.game_info)
         total_time_steps = 0
 
-        with open(csv_file_path, mode='w', newline='') as file:
-            writer = csv.writer(file)
+        for i_episode in range(1, max_episodes + 1):
+            # Reset the environment and preprocess the initial state
+            raw_state, info = env.reset()
+            # The raw state is a screen-dump of the game.
+            # It is resized to 84x84 and turned to grayscale during preprocessing.
+            first_frame = preprocess_frame(raw_state, self.game_info.crop_values, keep_color=True)
+            frames = np.stack([first_frame] * 4, axis=0)  # Stack the initial state 4 times
 
-            # Write header row
-            writer.writerow(['episode', 'time_step', 'action', 'lives', 'reward', 'score'])
+            self.update_best_game()
+            self.init_game()
 
-            for i_episode in range(1, max_episodes + 1):
-                # Reset the environment and preprocess the initial state
-                raw_state, info = env.reset()
-                # The raw state is a screen-dump of the game.
-                # It is resized to 84x84 and turned to grayscale during preprocessing.
-                first_frame = preprocess_frame(raw_state, self.game_info.crop_values, keep_color=True)
-                frames = np.stack([first_frame] * 4, axis=0)  # Stack the initial state 4 times
+            last_action = 0  # NOOP
+            t = 0
+            lives = info.get('lives', 0)
+            game_over = False
+            score = 0
 
-                self.update_best_game()
-                self.init_game()
+            while not game_over:
 
-                last_action = 0  # NOOP
-                t = 0
+                image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
+                if t % save_image_interval == 0:
+                    filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
+                    save_image_to_file(image, os.path.join(self.game_logger.log_folder, filename))
+
+                action, llm_messages, llm_result = self.act(image, last_action, i_episode, t)
+
+                # execute the action and get the reward from the environment
+                next_raw_state, reward, done, truncated, info = env.step(action)
+                next_state_frame = preprocess_frame(next_raw_state, self.game_info.crop_values, keep_color=True)
+
+                # Update the state stack with the new frame
+                next_frames = np.append(frames[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
+
+                action_text = self.game_info.actions[action]
+                self.current_game_state.recent_actions = self.current_game_state.recent_actions[1:] + [action_text]
+                self.current_game_state.recent_rewards = self.current_game_state.recent_rewards[1:] + [reward]
+                self.current_game_state.total_reward += reward
+
+                if llm_messages is not None:
+                    if reward > 0:
+                        prefix = ('You received a reward following your last action! '
+                                  'That means you did something right.\n\n')
+                        self.update_guidelines_with_llm(llm_messages, llm_result,
+                                                        get_update_guidelines_message(prefix), i_episode, t)
+                    elif info.get('lives', 0) < lives:
+                        prefix = 'You lost a life!\n\n'
+                        self.update_guidelines_with_llm(llm_messages, llm_result,
+                                                        get_update_guidelines_message(prefix), i_episode, t)
+
+                last_action = action
+                frames = next_frames
+                score += reward
                 lives = info.get('lives', 0)
-                game_over = False
-                score = 0
+                total_time_steps += 1  # total time-steps so far
+                t += 1  # time-steps in this episode
+                game_over = done or truncated
 
-                while not game_over:
+                self.game_logger.log_game_data(i_episode, t, action, lives, reward, score, self.current_game_state)
 
-                    image = merge_images_with_bars(np.stack(frames, axis=0), has_color=True)
-                    if t % save_image_interval == 0:
-                        filename = f'4-{str(self.game_info).lower()[9:]}_{i_episode}_{t}.png'
-                        save_image_to_file(image, os.path.join(self.log_folder, filename))
+                if total_time_steps >= max_time_steps:
+                    return
 
-                    action, llm_messages, llm_result = self.act(image, last_action, i_episode, t)
-
-                    # execute the action and get the reward from the environment
-                    next_raw_state, reward, done, truncated, info = env.step(action)
-                    next_state_frame = preprocess_frame(next_raw_state, self.game_info.crop_values, keep_color=True)
-
-                    # Update the state stack with the new frame
-                    next_frames = np.append(frames[1:, :, :], np.expand_dims(next_state_frame, 0), axis=0)
-
-                    action_text = self.game_info.actions[action]
-                    self.current_game_state.recent_actions = self.current_game_state.recent_actions[1:] + [action_text]
-                    self.current_game_state.recent_rewards = self.current_game_state.recent_rewards[1:] + [reward]
-                    self.current_game_state.total_reward += reward
-
-                    if llm_messages is not None:
-                        if reward > 0:
-                            prefix = ('You received a reward following your last action! '
-                                      'That means you did something right.\n\n')
-                            self.update_guidelines_with_llm(llm_messages, llm_result,
-                                                            get_update_guidelines_message(prefix), i_episode, t)
-                        elif info.get('lives', 0) < lives:
-                            prefix = 'You lost a life!\n\n'
-                            self.update_guidelines_with_llm(llm_messages, llm_result,
-                                                            get_update_guidelines_message(prefix), i_episode, t)
-
-                    last_action = action
-                    frames = next_frames
-                    score += reward
-                    lives = info.get('lives', 0)
-                    total_time_steps += 1  # total time-steps so far
-                    t += 1  # time-steps in this episode
-                    game_over = done or truncated
-
-                    # log results in multiple ways
-                    writer.writerow([i_episode, t, action, lives, reward, score])
-                    print(f'Episode: {i_episode}  Time step: {t}  Action: {self.game_info.actions[action]}  '
-                          f'Lives:  {lives}  Reward: {reward}  Score: {score}')
-                    log_game_event(i_episode, t, lives, action, reward, score, self.current_game_state, self.game_log)
-
-                    if total_time_steps >= max_time_steps:
-                        return
+        self.game_logger.close()
 
 
 if __name__ == '__main__':
@@ -375,5 +325,3 @@ if __name__ == '__main__':
     agent = LLMAgent(GameInfo.BREAKOUT)
     agent.train(env_)
     env_.close()
-
-
