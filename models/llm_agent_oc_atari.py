@@ -176,7 +176,8 @@ class LLMAgentOcAtari:
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_agent_state)
 
-    def train(self, env, max_episodes=5, max_time_steps=2000, save_image_interval=4):
+    def train(self, env, max_episodes=5, max_total_time_steps=2000, max_time_steps_per_episode=500,
+              save_image_interval=4):
 
         self.game_logger = GameLogger('LLM-Agent-OcAtari', self.game_info)
         total_time_steps = 0
@@ -253,7 +254,10 @@ class LLMAgentOcAtari:
                 self.current_agent_state.previous_game_state = self.current_agent_state.current_game_state
                 self.current_agent_state.current_game_state = ""
 
-                if total_time_steps >= max_time_steps:
+                if t >= max_time_steps_per_episode:
+                    break
+                if total_time_steps >= max_total_time_steps:
+                    self.game_logger.close()
                     return
 
         self.game_logger.close()

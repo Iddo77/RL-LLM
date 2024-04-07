@@ -252,7 +252,8 @@ class LLMVisionAgent:
         if new_guidelines is not None:
             update_guidelines(new_guidelines, self.current_game_state)
 
-    def train(self, env, max_episodes=5, max_time_steps=2000, save_image_interval=4):
+    def train(self, env, max_episodes=5, max_total_time_steps=2000, max_time_steps_per_episode=500,
+              save_image_interval=4):
 
         self.game_logger = GameLogger('LLM-Vision-Agent', self.game_info)
         total_time_steps = 0
@@ -321,7 +322,10 @@ class LLMVisionAgent:
 
                 self.game_logger.log_game_data(i_episode, t, action, lives, reward, score, self.current_game_state)
 
-                if total_time_steps >= max_time_steps:
+                if t >= max_time_steps_per_episode:
+                    break
+                if total_time_steps >= max_total_time_steps:
+                    self.game_logger.close()
                     return
 
         self.game_logger.close()
@@ -330,8 +334,8 @@ class LLMVisionAgent:
 if __name__ == '__main__':
     start_time = datetime.now()
     print(f"Start Time: {start_time}")
-    env_ = gym.make('BreakoutDeterministic-v4')
-    agent = LLMVisionAgent(GameInfo.BREAKOUT)
+    env_ = gym.make('BoxingDeterministic-v4')
+    agent = LLMVisionAgent(GameInfo.BOXING)
     agent.train(env_)
     env_.close()
     end_time = datetime.now()
