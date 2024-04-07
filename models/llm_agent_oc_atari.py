@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from ocatari.core import OCAtari
 
 from models.game_info import GameInfo
-from models.agent_state_oc_atari import AgentState
+from models.game_state_oc_atari import GameState
 from image_processing import preprocess_frame, merge_images_with_bars, save_image_to_file
 from models.game_logger import GameLogger
 from utils import parse_json_from_substring, escape_brackets, trim_list
@@ -73,7 +73,7 @@ Respond with the json only and write nothing else.
     return HumanMessagePromptTemplate.from_template(template=prompt_text)
 
 
-def update_game_state_and_act(llm_result: dict, game_state: AgentState, game_info: GameInfo):
+def update_game_state_and_act(llm_result: dict, game_state: GameState, game_info: GameInfo):
 
     if "world_model" in llm_result:
         game_state.world_model = llm_result["world_model"]
@@ -90,7 +90,7 @@ def update_game_state_and_act(llm_result: dict, game_state: AgentState, game_inf
     return action
 
 
-def update_guidelines(llm_result: dict, game_state: AgentState):
+def update_guidelines(llm_result: dict, game_state: GameState):
     if "guidelines" in llm_result:
         new_guidelines = llm_result["guidelines"]
         if "recommendations" in new_guidelines:
@@ -106,19 +106,19 @@ def update_guidelines(llm_result: dict, game_state: AgentState):
 class LLMAgentOcAtari:
     def __init__(self, game_info: GameInfo):
         self.game_info = game_info
-        self.current_agent_state: AgentState | None = None
-        self.best_agent_state: AgentState | None = None
+        self.current_agent_state: GameState | None = None
+        self.best_agent_state: GameState | None = None
         self.llm = ChatOpenAI(temperature=1, model_name='gpt-3.5-turbo', max_tokens=256)
         # the guide is separate, because it can produce more output tokens
         self.llm_guide = ChatOpenAI(temperature=1, model_name='gpt-4-turbo-preview', max_tokens=512)
         self.game_logger: GameLogger | None = None
 
-    def init_game(self) -> AgentState:
+    def init_game(self) -> GameState:
 
         if self.best_agent_state is not None:
-            self.current_agent_state = AgentState.from_agent_state(self.best_agent_state)
+            self.current_agent_state = GameState.from_agent_state(self.best_agent_state)
         else:
-            self.current_agent_state = AgentState()
+            self.current_agent_state = GameState()
             self.current_agent_state.available_actions = self.game_info.actions
 
         self.current_agent_state.objects_in_previous_frame = "Missing. The game just started"

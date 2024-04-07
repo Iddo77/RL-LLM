@@ -1,7 +1,7 @@
 import json
 
 
-class AgentState:
+class GameState:
     def __init__(self):
         self.world_model = ""
         self.available_actions = []
@@ -27,8 +27,8 @@ class AgentState:
         return game_state
 
     @classmethod
-    def from_agent_state(cls, game_state: 'AgentState'):
-        """Creates a new AgentState instance, retaining only previously_encountered_entities, guidelines and
+    def from_agent_state(cls, game_state: 'GameState'):
+        """Creates a new GameState instance, retaining only previously_encountered_entities, guidelines and
         available_actions from the original."""
         new_instance = cls()
         new_instance.world_model = game_state.world_model
