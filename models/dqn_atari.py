@@ -161,7 +161,7 @@ class DQNAgent:
                     self.target_model.load_state_dict(self.model.state_dict())
                     self.target_model.eval()
 
-                if done or truncated:
+                if done or truncated or t == max_time_steps_per_episode - 1:
                     # decay epsilon, so that more exploitation is done and less exploration
                     self.eps = max(self.eps_min, self.eps_decay * self.eps)
                     break
@@ -204,7 +204,7 @@ class DQNAgent:
 
 
 if __name__ == '__main__':
-    env_ = gym.make('BreakoutNoFrameskip-v4')
-    agent = DQNAgent('BreakoutNoFrameskip-v4', env_.action_space.n)
-    scores_ = agent.train(env_, GameInfo.BREAKOUT)
+    env_ = gym.make('PongNoFrameskip-v4')
+    agent = DQNAgent('PongNoFrameskip-v4', env_.action_space.n)
+    scores_ = agent.train(env_, GameInfo.PONG)
     env_.close()
