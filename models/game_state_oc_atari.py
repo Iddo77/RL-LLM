@@ -14,7 +14,7 @@ class GameState:
             "recommendations": [],
             "things_to_avoid": []
         }
-        self.total_reward = 0.0
+        self.total_positive_reward = 0.0
 
     def to_json(self):
         return json.dumps(self.__dict__, indent=2)

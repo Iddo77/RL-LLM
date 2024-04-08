@@ -186,11 +186,11 @@ class LLMVisionAgent:
     def update_best_game(self):
         if self.current_game_state is None:
             return
-        if self.best_game_state is None and self.current_game_state.total_reward > 0:
+        if self.best_game_state is None and self.current_game_state.total_positive_reward > 0:
             # no need to keep game states with no rewards
             self.best_game_state = self.current_game_state
         elif (self.best_game_state is not None and
-              self.current_game_state.total_reward > self.best_game_state.total_reward):
+              self.current_game_state.total_positive_reward > self.best_game_state.total_positive_reward):
             self.best_game_state = self.current_game_state
 
     def act(self, image, last_action, episode, time_step):
@@ -294,7 +294,8 @@ class LLMVisionAgent:
                 action_text = self.game_info.actions[action]
                 self.current_game_state.recent_actions = self.current_game_state.recent_actions[1:] + [action_text]
                 self.current_game_state.recent_rewards = self.current_game_state.recent_rewards[1:] + [reward]
-                self.current_game_state.total_reward += reward
+                if reward > 0.0:
+                    self.current_game_state.total_positive_reward += reward
 
                 if llm_messages is not None:
                     if reward > 0:
