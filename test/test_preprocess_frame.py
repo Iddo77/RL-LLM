@@ -202,5 +202,23 @@ class TestPreprocessFrame(unittest.TestCase):
         self.assertTrue(True)
 
 
+    def test_pong(self):
+
+        env = gym.make('PongDeterministic-v4')
+        env.reset()
+
+        # Process and save the first 8 frames
+        for i in range(4):
+            action = env.action_space.sample()  # Taking a random action
+            next_state, reward, terminated, truncated, info = env.step(action)
+            next_state = preprocess_frame(next_state, GameInfo.PONG.crop_values)
+            save_image_to_file(next_state, f'PongDeterministic{i + 1}.png')
+
+            if terminated or truncated:
+                break
+
+        env.close()
+        self.assertTrue(True)
+
 if __name__ == '__main__':
     unittest.main()
