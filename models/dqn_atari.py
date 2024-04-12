@@ -74,7 +74,7 @@ class DQNAgent:
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
         self.criterion = nn.MSELoss()
         self.eps = 1.0  # epsilon is for epsilon-greedy exploration
-        self.eps_decay = 0.998  # it decays over time, so in the beginning more exploration and later more exploitation
+        self.eps_decay = 0.9985  # it decays over time, so in the beginning more exploration and later more exploitation
         self.eps_min = 0.01
         self.gamma = 0.99  # the discount factor, that discounts the value of future states
         self.learn_freq = learn_freq  # how often to call self.learn()
@@ -115,7 +115,7 @@ class DQNAgent:
         self.optimizer.step()
 
     def train(self, env, game_info: GameInfo, max_episodes=10000, max_total_time_steps=int(1e6),
-              max_time_steps_per_episode=1000, save_interval=100, log_interval=10):
+              max_time_steps_per_episode=500, save_interval=100, log_interval=10):
 
         game_logger = DQNGameLogger(self.game_name, log_interval, save_interval)
         scores = []
@@ -204,7 +204,7 @@ class DQNAgent:
 
 
 if __name__ == '__main__':
-    env_ = gym.make('PongNoFrameskip-v4')
-    agent = DQNAgent('PongNoFrameskip-v4', env_.action_space.n)
-    scores_ = agent.train(env_, GameInfo.PONG)
+    env_ = gym.make('BreakoutDeterministic-v4')
+    agent = DQNAgent('BreakoutDeterministic-v4', env_.action_space.n)
+    scores_ = agent.train(env_, GameInfo.BREAKOUT)
     env_.close()
