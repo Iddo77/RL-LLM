@@ -335,8 +335,8 @@ class LLMVisionAgent:
 if __name__ == '__main__':
     start_time = datetime.now()
     print(f"Start Time: {start_time}")
-    env_ = gym.make('BoxingDeterministic-v4')
-    agent = LLMVisionAgent(GameInfo.BOXING)
+    env_ = gym.make('PongDeterministic-v4')
+    agent = LLMVisionAgent(GameInfo.PONG)
     agent.train(env_)
     env_.close()
     end_time = datetime.now()

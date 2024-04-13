@@ -267,8 +267,8 @@ class LLMAgentOcAtari:
 if __name__ == '__main__':
     start_time = datetime.now()
     print(f"Start Time: {start_time}")
-    env_ = OCAtari("BreakoutDeterministic-v4", mode="ram", hud=False, render_mode="rgb_array")
-    agent = LLMAgentOcAtari(GameInfo.BREAKOUT)
+    env_ = OCAtari("PongDeterministic-v4", mode="ram", hud=False, render_mode="rgb_array")
+    agent = LLMAgentOcAtari(GameInfo.PONG)
     agent.train(env_)
     env_.close()
     end_time = datetime.now()
