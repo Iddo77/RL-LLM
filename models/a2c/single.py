@@ -32,9 +32,10 @@ def check_gpu():
 
 def load_and_evaluate(model_type, env_id):
     """
-    Loads and evaluates a saved A2C model on a specified Atari environment.
+    Loads and evaluates a saved RL model on a specified Atari environment.
 
     Args:
+        model_type (str): The type of RL model to use.
         env_id (str): The Gym ID of the Atari environment.
 
     Returns:
@@ -55,9 +56,10 @@ def load_and_evaluate(model_type, env_id):
 
 def visualize_performance(model_type, env_id):
     """
-    Renders and visually demonstrates the performance of a trained A2C model on specified Atari environment.
+    Renders and visually demonstrates the performance of a trained RL model on specified Atari environment.
 
     Args:
+        model_type (str): The type of RL model to use.
         env_id (str): The Gym ID of the Atari environment
     """
     env = make_atari_env(env_id, n_envs=1, seed=0)
@@ -76,9 +78,10 @@ def visualize_performance(model_type, env_id):
 
 def train_and_evaluate(model_type, env_id, total_timesteps=int(1e6), max_episodes=500):
     """
-    Trains and evaluates an A2C model on a specified Atari environment.
+    Trains and evaluates a RL model on a specified Atari environment.
 
     Args:
+        model_type (str): The type of RL model to use.
         env_id (str): The Gym ID of the Atari environment.
         total_timesteps (int): The total number of timesteps to train the model.
 
@@ -114,8 +117,9 @@ def objective(model_type, trial, env_id):
     Objective function for hyperparameter tuning using Optuna.
 
     Args:
-        env_id (str): The Gym ID of the Atari environment.
+        model_type (str): The type of RL model to use.
         trial (optuna.trial.Trial): Individual trial of the optimization process.
+        env_id (str): The Gym ID of the Atari environment.        
 
     Returns:
         mean_reward (float): The mean reward achieved by the trained model on the evaluation.
@@ -149,11 +153,15 @@ def objective(model_type, trial, env_id):
 
 
 def main():
+    """
+    Main function to train and evaluate RL models on specified Atari environments,
+    and visualize performance of a trained model.
+    """
     parser = argparse.ArgumentParser(description="Train and evaluate RL models on Atari environments.")
     parser.add_argument('--model', type=str, choices=['a2c', 'ppo'], default='a2c', help='Model type to use for training (A2C or PPO)')
     parser.add_argument('--env', type=str, choices=['BreakoutDeterministic-v4', 'PongDeterministic-v4'], default='BreakoutDeterministic-v4', help='Atari environment ID')
     parser.add_argument('--visualize', action='store_true', help='Visualize the performance of a trained model')
-    parser.add_argument('--max_episodes', type=int, default='None', help='Maximum number of episodes to train')
+    parser.add_argument('--max_episodes', type=str, default='None', help='Maximum number of episodes to train')
     parser.add_argument('--tuning', type=str, default='no', help='Enable hyperparameter tuning: yes or no')
     
     args = parser.parse_args()
