@@ -80,6 +80,29 @@ def main():
     ...
 ```
 
+## Run
+
+The `a2c.py` script is designed to train and evaluate the A2C model on single Atari game environments. It supports hyperparameter tuning, selecting specific Atari environments, setting the number of episodes, and visualizing the trained model.
+
+- **Basic training and evaluation**: this command trains and evaluates the A2C model on the BreakoutDeterministic-v4 environment with default settings.
+```bash
+python3 a2c.py --env BreakoutDeterministic-v4
+```
+
+- **Training with hyperparameter tuning**: this command enables hyperparameter tuning for the PongDeterministic-v4 environment.
+```bash
+python3 a2c.py --env PongDeterministic-v4 --tuning yes
+```
+
+- **Setting maximum episodes**: this command sets a cap of 500 episodes for training the model on the BreakoutDeterministic-v4 environment.
+```bash
+python3 a2c.py --env BreakoutDeterministic-v4 --max_episodes 500
+```
+
+- **Visualizing the model**: this command trains the model and then visualizes its performance in the game.
+```bash
+python3 a2c.py --env PongDeterministic-v4 --visualize
+```
 
 # Multi-Agent A2C Training for Atari Boxing Environment
 
@@ -129,4 +152,23 @@ def eval_atari_supersuit(env_fn, num_games=10, render_mode=None):
 For visualization, the rendering mode is set to 'human' to display the game window, allowing real-time observation of agent interactions and decisions.
 ```python
 eval_atari_supersuit(boxing_v2, num_games=1, render_mode='human')
+```
+
+## Run
+
+The `multi_a2c.py` script is used for training and evaluation of the A2C model in a multi-agent setting using the Boxing environment from PettingZoo's Atari collection.
+
+- **Basic training and evaluation**: this command trains and evaluates the model with default settings and without rendering.
+```bash
+python3 multi_a2c.py
+```
+
+- **Training with specified steps and games**: this command trains and evaluates the model for 500,000 steps, and 50 games.
+```bash
+python3 multi_a2c.py --steps 500000 --num_games 50
+```
+
+- **Evaluating with rendering for 2 games (assuming training is done)**: this command evaluates the model with rendering for 3 games.
+```bash
+python3 multi_a2c.py --render --render_games 3
 ```

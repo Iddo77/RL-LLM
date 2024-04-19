@@ -2,6 +2,7 @@ from __future__ import annotations
 import glob
 import os
 import time
+import argparse
 
 import supersuit as ss
 from stable_baselines3 import A2C
@@ -112,9 +113,34 @@ def eval_atari_supersuit(env_fn, num_games: int = 100, render_mode: str | None =
     print(f"Full rewards: {rewards}")
     return avg_reward
 
-if __name__ == "__main__":
+def main():
+    """
+    Main function to train and evaluate A2C models on Boxing Atari environment,
+    and visualize performance of a trained model.
+    """
+    parser = argparse.ArgumentParser(description="Train and evaluate A2C on multi-agent Atari environment")
+    parser.add_argument('--steps', type=int, default=10000, help='Number of steps to train the model')
+    parser.add_argument('--num_games', type=int, default=100, help='Number of games to evaluate the model')
+    parser.add_argument('--render', action='store_true', help='Render the game visually during evaluation')
+    parser.add_argument('--render_games', type=int, default=10, help='Number of games to render')
+    
+    args = parser.parse_args()
+
     env_fn = boxing_v2
     env_kwargs = {}
-    train_atari_supersuit(env_fn, steps=1_000_000, seed=0, **env_kwargs) # Comment when only evaluation is needed
-    eval_atari_supersuit(env_fn, num_games=10, render_mode=None, **env_kwargs)
-    #eval_atari_supersuit(env_fn, num_games=1, render_mode="human", **env_kwargs)  # Watch the trained agent
+
+    # Train the model
+    print("Training the model...")
+    train_atari_supersuit(env_fn, steps=args.steps, seed=0, **env_kwargs) 
+
+    # Evaluate the model
+    if args.render:
+        print(f"Evaluating and rendering {args.render_games} games...")
+        eval_atari_supersuit(env_fn, num_games=args.render_games, render_mode="human", **env_kwargs)
+    
+    print(f"Evaluating without rendering for {args.num_games} games...")
+    eval_atari_supersuit(env_fn, num_games=args.num_games, render_mode=None, **env_kwargs)
+    
+
+if __name__ == "__main__":
+    main()
