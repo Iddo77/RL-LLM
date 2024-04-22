@@ -12,56 +12,9 @@ DQN_PONG_ALL_FOLDER = r'.\models\DQN\2024-04-13_17.30_PongDeterministic-v4'
 DQN_BOXING_ALL_FOLDER = r'.\models\DQN\2024-04-13_13.28_BoxingDeterministic-v4'
 
 
-# def plot_average_score(csv_file, save_path):
-#     data = pd.read_csv(csv_file)
-#
-#     plt.figure(figsize=(10, 6))
-#     plt.plot(data['end_episode'], data['average_score'], marker='o')
-#     plt.title('Average Score Over Episodes')
-#     plt.xlabel('End Episode')
-#     plt.ylabel('Average Score')
-#     plt.grid(True)
-#
-#     plt.savefig(save_path)
-#     plt.close()
-
-
-# def plot_average_score(csv_file, save_path):
-#     # Load the data from the CSV file
-#     data = pd.read_csv(csv_file)
-#
-#     # Extracting x and y values for plotting
-#     x = data['end_episode']
-#     y = data['average_score']
-#
-#     # Create a polynomial fit of degree 2 (quadratic)
-#     coeffs = np.polyfit(x, y, 2)
-#     # Generate a polynomial function from the coefficients
-#     poly_eq = np.poly1d(coeffs)
-#     # Create smooth x values for plotting the curve
-#     x_smooth = np.linspace(x.min(), x.max(), 500)
-#     # Generate y values from the polynomial function
-#     y_smooth = poly_eq(x_smooth)
-#
-#     # Plotting the data
-#     plt.figure(figsize=(10, 6))
-#     plt.plot(x, y, 'bo', label='Data Points')  # 'bo' for blue circle markers
-#     plt.plot(x_smooth, y_smooth, 'r-', label='Fit Curve')  # 'r-' for red line
-#     plt.title('Average Score Over Episodes')
-#     plt.xlabel('End Episode')
-#     plt.ylabel('Average Score')
-#     plt.grid(True)
-#     plt.legend()
-#
-#     # Save the plot to the specified path
-#     plt.savefig(save_path)
-#     plt.close()
-
 def plot_average_score(csv_file, save_path, poly_degree=3):
-    # Load the data from the CSV file
     data = pd.read_csv(csv_file)
 
-    # Extracting x and y values for plotting
     x = data['end_episode']
     y = data['average_score']
 
@@ -74,19 +27,17 @@ def plot_average_score(csv_file, save_path, poly_degree=3):
     # Generate y values from the polynomial function
     y_smooth = poly_eq(x_smooth)
 
-    # Plotting the data
     plt.figure(figsize=(10, 6))
-    plt.plot(x, y, 'bo', label='Data Points')  # 'bo' for blue circle markers
-    plt.plot(x_smooth, y_smooth, 'r-', label=f'{poly_degree}-Degree Polynomial Fit')  # 'r-' for red line
+    plt.plot(x, y, 'o', color='#1f77b4', label='Data Points')
+    plt.plot(x_smooth, y_smooth, '-', color='#ff7f0e', label=f'{poly_degree}-Degree Polynomial Fit')
     plt.title('Average Score Over Episodes')
     plt.xlabel('End Episode')
     plt.ylabel('Average Score')
     plt.grid(True)
     plt.legend()
-
-    # Save the plot to the specified path
     plt.savefig(save_path)
     plt.close()
+
 
 def plot_all():
 
