@@ -31,7 +31,7 @@ def plot_average_score(csv_file, save_path, poly_degree=3):
     plt.plot(x, y, 'o', color='#1f77b4', label='Data Points')
     plt.plot(x_smooth, y_smooth, '-', color='#ff7f0e', label=f'{poly_degree}-Degree Polynomial Fit')
     plt.title('Average Score Over Episodes')
-    plt.xlabel('End Episode')
+    plt.xlabel('Episode')
     plt.ylabel('Average Score')
     plt.grid(True)
     plt.legend()
