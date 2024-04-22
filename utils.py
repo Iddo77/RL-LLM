@@ -1,5 +1,7 @@
 import json
 
+import pandas as pd
+
 
 def parse_json_from_substring(input_string: str):
 
@@ -31,3 +33,9 @@ def escape_brackets(prompt_text: str, variables: list[str]) -> str:
 def trim_list(lst: list, max_size=10):
     while len(lst) > max_size:
         lst.pop(0)
+
+
+def calculate_column_average(file_path, column_index):
+    data = pd.read_csv(file_path)
+    column = data.iloc[:, column_index]
+    return column.mean()

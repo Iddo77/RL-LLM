@@ -1,5 +1,4 @@
 start_episode,end_episode,average_time_steps,average_score,high_score,start_eps,end_eps
-start_episode,end_episode,average_time_steps,average_score,high_score,start_eps,end_eps
 1,10,499,-10.8,-6.0,0.9985,0.9851
 11,20,499,-10.6,-9.0,0.9836,0.9704
 21,30,499,-11.0,-9.0,0.969,0.956
