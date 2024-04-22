@@ -1,2 +1,3 @@
 *.pyc
 *.zip
+/models/single_agent/sb3_log/tmp/gym

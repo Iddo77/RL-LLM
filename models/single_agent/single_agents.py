@@ -249,5 +249,3 @@ if __name__ == '__main__':
     main()
 
 
-ppo_results = plot_training_data('./sb3_log/single/')
-
