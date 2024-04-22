@@ -1,2 +1,0 @@
-train/entropy_loss,time/iterations,train/policy_loss,time/time_elapsed,train/explained_variance,train/n_updates,train/value_loss,train/learning_rate,time/total_timesteps,time/fps
--2.890334129333496,100,-0.001698512933216989,7,0.2747718095779419,99,2.8563124487845926e-06,0.001,8000,1050

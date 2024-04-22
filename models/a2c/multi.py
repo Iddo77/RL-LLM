@@ -89,6 +89,8 @@ def eval_atari_supersuit(model_type, env_fn, num_games: int = 100, render_mode: 
     print(f"Full rewards: {rewards}")
     return avg_reward
 
+
+
 def main():
     """
     Main function to train and evaluate RL models on Boxing Atari environment,
