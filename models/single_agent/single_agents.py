@@ -1,7 +1,5 @@
 import os
 import argparse
-import pandas as pd
-import matplotlib.pyplot as plt
 from stable_baselines3 import A2C, PPO
 from stable_baselines3.common.env_util import make_atari_env
 from stable_baselines3.common.vec_env import VecFrameStack
@@ -156,43 +154,6 @@ def objective(model_type, trial, env_id):
     mean_reward, _ = evaluate_policy(model, model.get_env(), n_eval_episodes=10)
 
     return mean_reward
-
-def plot_training_data(log_dir):
-    """
-    Plots the training progress from the Stable Baselines3 logs.
-
-    Args:
-    log_dir (str): Directory where the CSV log files are stored.
-    """
-    # log_file_a2c = os.path.join(log_dir, "a2c_pongNone_progress.csv")
-    # log_file_a2c_500 = os.path.join(log_dir, "a2c_pong500_progress.csv")
-    # log_file_ppo = os.path.join(log_dir, "ppo_pongNone_progress.csv")
-    # log_file_ppo_500 = os.path.join(log_dir, "ppo_pong500_progress.csv")
-
-    log_file_a2c = os.path.join(log_dir, "a2c_breakoutNone_progress.csv")
-    log_file_a2c_500 = os.path.join(log_dir, "a2c_breakout500_progress.csv")
-    log_file_ppo = os.path.join(log_dir, "ppo_breakoutNone_progress.csv")
-    log_file_ppo_500 = os.path.join(log_dir, "ppo_breakout500_progress.csv")
-
-    a2c_data = pd.read_csv(log_file_a2c)
-    a2c_data500 = pd.read_csv(log_file_a2c_500)
-    ppo_data = pd.read_csv(log_file_ppo)
-    ppo_data500 = pd.read_csv(log_file_ppo_500)
-    
-    plt.figure(figsize=(10, 5))
-    plt.step(a2c_data['time/total_timesteps'], a2c_data['rollout/ep_rew_mean'], where='post', label='A2C - No max episodes')
-    plt.step(a2c_data500['time/total_timesteps'], a2c_data500['rollout/ep_rew_mean'], where='post', label='A2C - 500 max episodes')
-    plt.step(ppo_data['time/total_timesteps'], ppo_data['rollout/ep_rew_mean'], where='post', label='PPO - No max episodes', linestyle='--')
-    plt.step(ppo_data500['time/total_timesteps'], ppo_data500['rollout/ep_rew_mean'], where='post', label='PPO - 500 max episodes', linestyle='--')
-
-    
-    plt.xlabel('Total Timesteps')
-    plt.ylabel('Average Reward per Episode')
-    plt.title('Breakout Score Progression')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
 
 
 def main():

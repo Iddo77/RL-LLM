@@ -1,21 +1,21 @@
-# A2C Single Agent Model Training for Atari Environments
+# Single-Agent RL Model Training for Atari Environments
 
 ## Introduction
-This project uses the synchronous, deterministic variant of Asynchronous Advantage Actor Critic algorithm (A2C) implemented via Stable Baselines3 to train models on various Atari game environments. 
+This README details the setup and usage for training and evaluating reinforcement learning models (A2C or PPO) on various Atari environments. The script utilizes the Stable Baselines3 framework for efficient RL training.
 
 ## Features
-- Training A2C models on Atari environments
-- Evaluating model performance and displaying average rewards
-- Visualizing the trained model in action within the Atari game
+- Training and evaluation with A2C and PPO algorithms.
+- Support for checking GPU availability to leverage CUDA for training if available.
+- Evaluation of model performance with both visual and non-visual feedback.
+- Optional hyperparameter tuning using Optuna to optimize model parameters.
 
 ## Code Explanation
 
 ### Configuration and Setup
-- **Logging Setup**: We configure a logger to  save output to both the console and a CSV file.
+- **Environment Setup**: Configures Atari environment and stacks frames for better state representation.
 ```python
-log_dir = "./sb3_log/"
-os.makedirs(log_dir, exist_ok=True)
-logger = configure(log_dir, ["stdout", "csv"])
+env = make_atari_env('Breakout-v4', n_envs=4, seed=0)
+env = VecFrameStack(env, n_stack=4)
 ```
 
 ### Callbacks
@@ -33,74 +33,39 @@ class MaxEpisodesCallback(BaseCallback):
         return self.epsiode_count < self.max_episodes
 ```
 
-### Core Functions
-- **train_and_evaluate**: Sets up the environment, initializes A2C model, applies callbacks, and performs training. After training, it evaluates the model's performance.
+### Training Process
+- **Model initialization and saving**: Initalizes a model with specified hyperparameters, performs training, and saves trained model.
 ```python
-def train_and_evaluate(env_id, total_timesteps=int(1e6), max_episodes=None):
-    vec_env = make_atari_env(env_id, n_envs=16, seed=0)
-    vec_env = VecFrameStack(vec_env, n_stack=4)
-    model = A2C("CnnPolicy",
-                vec_env,
-                verbose=1,
-                # learning_rate=2.5e-4,
-                # gamma=0.99,
-                # n_steps=5,
-                ent_coef=0.01,
-                vf_coef=0.25,
-                # normalize_advantage=True
-                stats_window_size=10 # number of episodes to average success, episode, reward
-                )
-    model.set_logger(logger)
-    ...
+model = A2C("CnnPolicy", env, verbose=1)
+model.learn(total_timesteps=1e6)
+model.save("./models/a2c_Breakout-v4")
 ```
-- **load_and_evaluate**: Loads a trained model and evaluates its performance.
+- **Evaluation**: Loads a trained model and evaluates its performance.
 ```python
-def load_and_evaluate(env_id):
-    vec_env = make_atari_env(env_id, n_envs=4, seed=0)
-    model_path = f"a2c_{env_id}.zip"
-    model = A2C.load(model_path, env=vec_env)
-    ...
+model = A2C("CnnPolicy", env, verbose=1)
+model.learn(total_timesteps=1e6)
+model.save("./models/a2c_Breakout-v4")
 ```
-- **visualize_performance**: Visualizes the model playing the game.
+- **Visualization**: Visualizes the model playing the game.
 ```python
-def visualize_performance(env_id):
-    env = make_atari_env(env_id, n_envs=1, seed=0)
-    model = A2C.load(f"a2c_{env_id}")
-    obs = env.reset()
-    while True:
-        action, _states = model.predict(obs, deterministic=True)
-        obs, rewards, dones, info = env.steps(action)
-        env.render("human")
-```
-- **main**: Runs training and evaluation, handling GPU checks, summarizing results.
-```python
-def main():
-    check_gpu()
-    environments = ["BreakoutDeterministic-v4", "PongDeterministic-v4", "Boxing-v4"]
-    ...
+visualize_performance('ppo', 'BreakoutDeterministic-v4')
 ```
 
-## Run
+## Usage
 
-The `a2c.py` script is designed to train and evaluate the A2C model on single Atari game environments. It supports hyperparameter tuning, selecting specific Atari environments, setting the number of episodes, and visualizing the trained model.
+The script supports various command-line options to specify the model type, environment, and whether to perform hyperparameter tuning or visualize the model's performance.
 
-- **Basic training and evaluation**: this command trains and evaluates the A2C model on the BreakoutDeterministic-v4 environment with default settings.
+- **Basic usage**
 ```bash
-python3 a2c.py --env BreakoutDeterministic-v4
+python3 single_agents.py --model ppo --env PongDeterministic-v4
 ```
 
-- **Training with hyperparameter tuning**: this command enables hyperparameter tuning for the PongDeterministic-v4 environment.
+- **Training with hyperparameter tuning and visualization**
 ```bash
-python3 a2c.py --env PongDeterministic-v4 --tuning yes
+python3 single_agents.py --model a2c --env BreakoutDeterministic-v4 --tuning yes --visualize
 ```
 
-- **Setting maximum episodes**: this command sets a cap of 500 episodes for training the model on the BreakoutDeterministic-v4 environment.
+- **Evaluate and visualize pre-trained model**
 ```bash
-python3 a2c.py --env BreakoutDeterministic-v4 --max_episodes 500
+python3 single_agents.py --model ppo --env BreakoutDeterministic-v4 --visualize
 ```
-
-- **Visualizing the model**: this command trains the model and then visualizes its performance in the game.
-```bash
-python3 a2c.py --env PongDeterministic-v4 --visualize
-```
-
