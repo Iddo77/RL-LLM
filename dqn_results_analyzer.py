@@ -39,6 +39,41 @@ def plot_average_score(csv_file, save_path, poly_degree=3):
     plt.close()
 
 
+def print_averages(csv_file):
+
+    df = pd.read_csv(csv_file)
+    avg_score = df['average_score'].mean()
+    print(f"Avg. Score: {avg_score:.1f}")
+
+    total_time_steps = df['average_time_steps'].sum()
+    first_5_percent_time_steps = total_time_steps * 0.05
+
+    cumulative_time_steps = df['average_time_steps'].cumsum()
+    first_5_percent_df = df[cumulative_time_steps <= first_5_percent_time_steps]
+    first_5_percent_average_score = first_5_percent_df['average_score'].mean()
+    print(f"First 5% Avg. Score: {first_5_percent_average_score:.1f}")
+
+    last_5_percent_time_steps = total_time_steps * 0.95
+    last_5_percent_df = df[cumulative_time_steps >= last_5_percent_time_steps]
+    last_5_percent_average_score = last_5_percent_df['average_score'].mean()
+    print(f"Final 5% Avg. Score: {last_5_percent_average_score:.1f}")
+
+
+def print_all_averages():
+    print("Breakout 500:")
+    print_averages(os.path.join(DQN_BREAKOUT_500_FOLDER, 'episodes.csv'))
+    print("Pong 500:")
+    print_averages(os.path.join(DQN_PONG_500_FOLDER, 'episodes.csv'))
+    print("Boxing 500:")
+    print_averages(os.path.join(DQN_BOXING_500_FOLDER, 'episodes.csv'))
+    print("Breakout:")
+    print_averages(os.path.join(DQN_BREAKOUT_ALL_FOLDER, 'episodes.csv'))
+    print("Pong:")
+    print_averages(os.path.join(DQN_PONG_ALL_FOLDER, 'episodes.csv'))
+    print("Boxing:")
+    print_averages(os.path.join(DQN_BOXING_ALL_FOLDER, 'episodes.csv'))
+
+
 def plot_all():
 
     os.makedirs(r'.\models\DQN-plots', exist_ok=True)
@@ -69,4 +104,5 @@ def plot_all():
 
 
 if __name__ == '__main__':
-    plot_all()
+    print_all_averages()
+    # plot_all()
