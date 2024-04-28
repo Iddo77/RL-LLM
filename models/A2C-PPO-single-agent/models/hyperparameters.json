@@ -1,0 +1,44 @@
+{
+    "a2c": {
+        "BreakoutDeterministic-v4": {
+            "learning_rate": 0.0008024186087006806,
+            "n_steps": 204,
+            "gamma": 0.9143763663897799,
+            "ent_coef": 0.0005586237578655625,
+            "vf_coef": 0.4686368112381003
+        },
+        "PongDeterministic-v4": {
+            "learning_rate": 7.237194927023023e-05,
+            "n_steps": 1070,
+            "gamma": 0.9556153170244847,
+            "ent_coef": 0.04578513356153974,
+            "vf_coef": 0.47307773266365793
+        },
+        "Boxing-v4": {
+            "learning_rate": 4.7838391492404546e-05,
+            "n_steps": 166,
+            "gamma": 0.9032330676976952,
+            "ent_coef": 0.0008440864412689357,
+            "vf_coef": 0.12270143550366407
+        }
+    },
+    "ppo": {
+        "BreakoutDeterministic-v4": {
+            "learning_rate": 0.0005311073035145371,
+            "n_steps": 546,
+            "gamma": 0.9882080939841136
+        },
+        "PongDeterministic-v4": {
+            "learning_rate": 0.0003452643742071318,
+            "n_steps": 342,
+            "gamma": 0.9354550499669403
+        },
+        "Boxing-v4": {
+            "learning_rate": 5.026221964490122e-05,
+            "n_steps": 188,
+            "gamma": 0.9214017140521861,
+            "ent_coef": 0.0028220606727653846,
+            "vf_coef": 0.10542833445473346
+        }
+    }
+}

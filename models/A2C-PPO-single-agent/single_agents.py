@@ -1,28 +1,14 @@
 import os
 import argparse
+import json
 from stable_baselines3 import A2C, PPO
 from stable_baselines3.common.env_util import make_atari_env
 from stable_baselines3.common.vec_env import VecFrameStack
 from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 
 import torch
 import optuna
-
-class MaxEpisodesCallback(BaseCallback):
-    def __init__(self, max_episodes: int, verbose=0):
-        super().__init__(verbose)
-        self.max_episodes = max_episodes
-        self.episode_count = 0
-
-    def _on_step(self) -> bool:
-        return self.episode_count < self.max_episodes
-        
-    def _on_rollout_end(self):
-        if 'episode' in self.locals:
-            self.episode_count += len(self.locals['episode']['r'])
-            self.logger.record('rollout/episodes', self.episode_count)
         
     
 def check_gpu():
@@ -33,6 +19,48 @@ def check_gpu():
         print("GPU is available for training")
     else:
         print("Training on CPU; no GPU detected")
+
+def train_and_evaluate(model_type, env_id, total_timesteps=int(1e6)):
+    """
+    Trains and evaluates a RL model on a specified Atari environment.
+
+    Args:
+        model_type (str): The type of RL model to use.
+        env_id (str): The Gym ID of the Atari environment.
+        total_timesteps (int): The total number of timesteps to train the model.
+
+    Returns:
+        mean_reward (float): The mean reward over the evaluation episodes.
+        std_reward (float): The standard deviation of the reward over the evaluation episodes.
+    """
+    path = "./sb3_log/single/"
+    logger = configure(path, ["stdout", "csv"])
+
+    print(f"Training on: {env_id}")
+    vec_env = make_atari_env(env_id, n_envs=16, seed=0)
+    vec_env = VecFrameStack(vec_env, n_stack=4)
+    
+    model_class = A2C if model_type.lower() == 'a2c' else PPO
+    with open("./models/hyperparameters.json", "r") as f:
+        data = json.load(f)
+        hyperparams = data[model_type][env_id]
+    model = model_class("CnnPolicy", 
+                        vec_env, 
+                        verbose=1, 
+                        stats_window_size=10,
+                        **hyperparams)
+                        # learning_rate=0.0003452643742071318,
+                        # n_steps=342,
+                        # gamma=0.9354550499669403)
+    
+    model.set_logger(logger)
+
+    model.learn(total_timesteps)
+    model.save(f"./models/{model_type.lower()}_{env_id}")
+
+    mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10)
+    print(f"Evaluation on {env_id}: Mean reward: {mean_reward} +/- {std_reward}\n")
+    return mean_reward, std_reward
 
 
 def load_and_evaluate(model_type, env_id):
@@ -79,43 +107,6 @@ def visualize_performance(model_type, env_id):
         obs, rewards, dones, info = env.step(action)
         env.render("human")
 
-    
-
-def train_and_evaluate(model_type, env_id, total_timesteps=int(1e6), max_episodes=500):
-    """
-    Trains and evaluates a RL model on a specified Atari environment.
-
-    Args:
-        model_type (str): The type of RL model to use.
-        env_id (str): The Gym ID of the Atari environment.
-        total_timesteps (int): The total number of timesteps to train the model.
-
-    Returns:
-        mean_reward (float): The mean reward over the evaluation episodes.
-        std_reward (float): The standard deviation of the reward over the evaluation episodes.
-    """
-    path = "./sb3_log/single/"
-    logger = configure(path, ["stdout", "csv"])
-
-    print(f"Training on: {env_id}")
-    vec_env = make_atari_env(env_id, n_envs=16, seed=0)
-    vec_env = VecFrameStack(vec_env, n_stack=4)
-    
-    model_class = A2C if model_type.lower() == 'a2c' else PPO
-    model = model_class("CnnPolicy", vec_env, verbose=1, stats_window_size=10)
-    model.set_logger(logger)
-
-    if max_episodes is not None:
-        callback = MaxEpisodesCallback(max_episodes=max_episodes)
-        model.learn(total_timesteps, callback=callback)
-    else:
-        model.learn(total_timesteps=total_timesteps)
-    model.save(f"./models/{model_type.lower()}_{env_id}")
-
-    mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10)
-    print(f"Evaluation on {env_id}: Mean reward: {mean_reward} +/- {std_reward}\n")
-    return mean_reward, std_reward
-          
 
 def objective(model_type, trial, env_id):
     """
@@ -146,9 +137,8 @@ def objective(model_type, trial, env_id):
                 ent_coef=ent_coef,
                 vf_coef=vf_coef,
                 stats_window_size=10)
-
-    callback = MaxEpisodesCallback(max_episodes=500)
-    model.learn(total_timesteps=100000, callback=callback)
+    
+    model.learn(total_timesteps=100000)
     model.save(f"./models/a2c_tuned_{env_id}")
 
     mean_reward, _ = evaluate_policy(model, model.get_env(), n_eval_episodes=10)
@@ -163,18 +153,16 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Train and evaluate RL models on Atari environments.")
     parser.add_argument('--model', type=str, choices=['a2c', 'ppo'], default='a2c', help='Model type to use for training (A2C or PPO)')
-    parser.add_argument('--env', type=str, choices=['BreakoutDeterministic-v4', 'PongDeterministic-v4'], default='BreakoutDeterministic-v4', help='Atari environment ID')
+    parser.add_argument('--env', type=str, choices=['BreakoutDeterministic-v4', 'PongDeterministic-v4', 'Boxing-v4'], default='BreakoutDeterministic-v4', help='Atari environment ID')
     parser.add_argument('--visualize', action='store_true', help='Visualize the performance of a trained model')
-    parser.add_argument('--max_episodes', type=str, default='None', help='Maximum number of episodes to train')
     parser.add_argument('--tuning', type=str, default='no', help='Enable hyperparameter tuning: yes or no')
     
     args = parser.parse_args()
-    max_episodes = None if args.max_episodes.lower() == 'none' else int(args.max_episodes)
 
     check_gpu()
 
     if args.tuning.lower() == 'yes':
-            print(f"Starting hyperparameter tuning for environment: {args.env} with max episodes: {max_episodes}")
+            print(f"Starting hyperparameter tuning for environment: {args.env}")
             study = optuna.create_study(direction='maximize')
             study.optimize(lambda trial: objective(args.model, trial, args.env), n_trials=10)
             print("Best trial:")
@@ -185,13 +173,13 @@ def main():
                 print(f"    {key}: {value}")
 
     else:
-        model_path = f"./models/{args.model}_{args.env}_maxep{max_episodes}_tuning{args.tuning}.zip"
+        model_path = f"./models/{args.model}_{args.env}_tuning{args.tuning}.zip"
         if os.path.exists(model_path):
             print(f"Model for {args.env} found. Loading and evaluating.")
             mean_reward, std_reward = load_and_evaluate(args.env)
         else:
             print(f"No model found for {args.env}. Training and evaluating.")
-            mean_reward, std_reward = train_and_evaluate(args.model, args.env, max_episodes=max_episodes)
+            mean_reward, std_reward = train_and_evaluate(args.model, args.env)
         
         print(f"Trained {args.model.upper()} on {args.env}: Mean Reward: {mean_reward} +/- {std_reward}")
         
@@ -199,7 +187,7 @@ def main():
             print("Visualizing performance for", args.env)
             visualize_performance(args.env)
 
-    mean_reward, std_reward = train_and_evaluate(args.model, args.env, max_episodes=args.max_episodes)
+    mean_reward, std_reward = train_and_evaluate(args.model, args.env)
     print(f"Trained {args.model.upper()} on {args.env}: Mean Reward: {mean_reward} +/- {std_reward}")
 
     if args.visualize:

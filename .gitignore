@@ -1,3 +1,4 @@
 *.pyc
 *.zip
+progress.csv
 /models/single_agent/sb3_log/tmp/gym

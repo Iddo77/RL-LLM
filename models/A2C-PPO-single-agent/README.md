@@ -1,7 +1,8 @@
 # Single-Agent RL Model Training for Atari Environments
 
 ## Introduction
-This README details the setup and usage for training and evaluating reinforcement learning models (A2C or PPO) on various Atari environments. The script utilizes the Stable Baselines3 framework for efficient RL training.
+This README details the setup and usage for training and evaluating reinforcement learning models (A2C or PPO) on various Atari environments. Environments include BreakoutDeterministic-v4, PongDeterministic-v4, and Boxing-v4. 
+The script utilizes the Stable Baselines3 framework for efficient RL training.
 
 ## Features
 - Training and evaluation with A2C and PPO algorithms.
@@ -18,25 +19,10 @@ env = make_atari_env('Breakout-v4', n_envs=4, seed=0)
 env = VecFrameStack(env, n_stack=4)
 ```
 
-### Callbacks
-- **MaxEpisodesCallback**: This callback is designed to stop training once a maximum number of episodes is reached.
-```python
-class MaxEpisodesCallback(BaseCallback):
-    def __init__(self, max_episodes: int, verbose=0):
-        super().__init__(verbose)
-        self.max_episodes = max_episodes
-        self.episode_count = 0
-
-    def _on_step(self) -> bool:
-        if 'episode' in self.locals:
-            self.episode_count += 1
-        return self.epsiode_count < self.max_episodes
-```
-
 ### Training Process
 - **Model initialization and saving**: Initalizes a model with specified hyperparameters, performs training, and saves trained model.
 ```python
-model = A2C("CnnPolicy", env, verbose=1)
+model = A2C("CnnPolicy", env, verbose=1, **hyperparameters)
 model.learn(total_timesteps=1e6)
 model.save("./models/a2c_Breakout-v4")
 ```
@@ -62,7 +48,7 @@ python3 single_agents.py --model ppo --env PongDeterministic-v4
 
 - **Training with hyperparameter tuning and visualization**
 ```bash
-python3 single_agents.py --model a2c --env BreakoutDeterministic-v4 --tuning yes --visualize
+python3 single_agents.py --model a2c --env Boxing-v4 --tuning yes --visualize
 ```
 
 - **Evaluate and visualize pre-trained model**
