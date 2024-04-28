@@ -27,4 +27,4 @@ To run any of these scripts:
 ### Important Notes
 
 - There is currently no extension for running these scripts directly from the console. You can run the scripts using an IDE or by calling them from other Python code.
-- For specific details on the agents using Proximal Policy Optimization (PPO) and Advantage Actor-Critic (A2C), refer to the respective READMEs in the `single_agent` and `multi_agent` folders.
+- For specific details on the agents using Proximal Policy Optimization (PPO) and Advantage Actor-Critic (A2C), refer to the respective READMEs in the `A2C-PPO-single-agent` and `A2C-PPO-multi-agent` folders.
